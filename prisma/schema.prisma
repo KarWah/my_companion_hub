@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String      @id @default(uuid())
+  email           String      @unique
+  username        String      @unique
+  name            String      // Display name (what companion calls the user)
+  hashedPassword  String
+
+  companions      Companion[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([email])
+  @@index([username])
+}
+
+model Companion {
+  id                String   @id @default(uuid())
+  name              String
+
+  description       String   @db.Text // Personality
+  visualDescription String   @db.Text // Physical Body Prompt (Renamed from basePrompt)
+  userAppearance    String?  @db.Text // How the user looks
+
+  // Dynamic State
+  defaultOutfit     String   @default("casual clothes") // Original outfit to restore on memory wipe
+  currentOutfit     String   @default("casual clothes")
+  currentLocation   String   @default("living room")
+  currentAction     String   @default("looking at viewer")
+  avatarUrl         String?  @db.Text // Deprecated - use headerImage instead
+  headerImage       String?  @db.Text // Base64 encoded header/profile image
+
+  // User relationship
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  messages          Message[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Message {
+  id           String    @id @default(uuid())
+  role         String    // "user" | "assistant"
+  content      String    // Text content
+  imageUrl     String?   // If an image was generated
+  companionId  String
+  companion    Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+
+  @@index([companionId])
+}
+
+model RateLimit {
+  id          String   @id @default(uuid())
+  identifier  String   // IP+action or userId+action
+  action      String   // "login", "register", "chat", "image", etc.
+  count       Int      @default(1)
+  resetAt     DateTime // When the rate limit window resets
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([identifier, action])
+  @@index([identifier])
+  @@index([resetAt])
+}

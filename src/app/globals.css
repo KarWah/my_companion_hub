@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0f172a; 
+  --foreground: #e2e8f0; 
+  --sidebar: #1e293b;    
+  --chat-bubble-user: #3b82f6; 
+  --chat-bubble-bot: #334155;  
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}

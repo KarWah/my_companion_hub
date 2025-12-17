@@ -1,0 +1,5 @@
+.env
+.gitattributes
+.next
+node_modules
+.vscode
