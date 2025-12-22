@@ -148,7 +148,9 @@ How It Works
 
 ⚠️ Known Issues / Troubleshooting
 
-    currently image generation is stored on DB, might crash if too many images are saved (System design flaw)
+    Long generation times (15-30s) may cause timeouts on some hosting platforms because the client waits synchronously for the response.
+    
+    Currently image generation is stored on DB, might crash if too many images are saved (System design flaw)
     
     Connection Refused (Temporal): Ensure the Docker container for Temporal is running and the worker is started (npm run worker).
     
