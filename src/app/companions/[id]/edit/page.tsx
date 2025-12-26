@@ -27,7 +27,7 @@ export default async function EditCompanionPage({
           visualDescription: companion.visualDescription,
           currentOutfit: companion.currentOutfit,
           userAppearance: companion.userAppearance || "",
-          headerImage: companion.headerImage || "",
+          headerImage: companion.headerImageUrl || companion.headerImageLegacy || "",
         }}
         submitLabel="Save Changes"
       />

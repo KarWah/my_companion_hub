@@ -1,4 +1,4 @@
-import { proxyActivities } from '@temporalio/workflow';
+import { proxyActivities, defineQuery, defineSignal, setHandler, workflowInfo } from '@temporalio/workflow';
 import type * as activities from './activities';
 
 const {
@@ -8,19 +8,18 @@ const {
   updateCompanionContext
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: '2 minutes',
+  retry: {
+    maximumAttempts: 3,
+    initialInterval: '1s',
+    backoffCoefficient: 2,
+    maximumInterval: '10s',
+  },
 });
 
-export interface ChatWorkflowArgs {
-  companionId: string;
-  companionName: string;
-  userMessage: string;
-  userName: string;
-  currentOutfit: string;
-  currentLocation: string;
-  currentAction: string;
-  msgHistory: { role: "user" | "assistant"; content: string }[];
-  shouldGenerateImage: boolean;
-}
+import type { WorkflowProgress, ChatWorkflowArgs, WorkflowResult } from '@/types/workflow';
+
+export const progressQuery = defineQuery<WorkflowProgress>('progress');
+export const textTokenSignal = defineSignal<[string]>('textToken');
 
 export async function ChatWorkflow({
   companionId,
@@ -34,7 +33,37 @@ export async function ChatWorkflow({
   shouldGenerateImage
 }: ChatWorkflowArgs) {
 
-  // Analyze user's message to get initial state for companion's response
+  // Get workflow ID for streaming
+  const wfId = workflowInfo().workflowId;
+
+  // Initialize progress state
+  let currentProgress: WorkflowProgress = {
+    status: 'started',
+    progress: 0,
+    currentStep: 'Starting...',
+    streamedText: ''
+  };
+
+  // Set up query handler for progress polling
+  setHandler(progressQuery, () => currentProgress);
+
+  // Set up signal handler for streamed tokens from activity
+  setHandler(textTokenSignal, (token: string) => {
+    currentProgress.streamedText += token;
+  });
+
+  // Helper to update progress
+  const updateProgress = (update: Partial<WorkflowProgress>) => {
+    currentProgress = { ...currentProgress, ...update };
+  };
+
+  // Step 1: Initial context analysis (10-30%)
+  updateProgress({
+    status: 'analyzing',
+    progress: 10,
+    currentStep: 'Analyzing message...'
+  });
+
   const initialContext = await analyzeContext(
     currentOutfit,
     currentLocation,
@@ -46,17 +75,37 @@ export async function ChatWorkflow({
     "",
   );
 
-  // Companion responds based on initial context
+  updateProgress({ progress: 30 });
+
+  // Step 2: Generate LLM response with streaming (30-70%)
+  updateProgress({
+    status: 'responding',
+    progress: 30,
+    currentStep: `${companionName} is thinking...`
+  });
+
   const reply = await generateLLMResponse(
     companionId,
     userMessage,
     msgHistory,
     initialContext,
     initialContext.isUserPresent,
-    userName
+    userName,
+    wfId
   );
 
-  // Re-analyze including companion's response to catch any actions SHE described
+  updateProgress({
+    progress: 70,
+    streamedText: reply
+  });
+
+  // Step 3: Re-analyze (70-80%)
+  updateProgress({
+    status: 'analyzing',
+    progress: 70,
+    currentStep: 'Updating context...'
+  });
+
   const updatedHistory: { role: "user" | "assistant"; content: string }[] = [
     ...msgHistory,
     { role: 'user' as const, content: userMessage },
@@ -67,20 +116,23 @@ export async function ChatWorkflow({
     currentOutfit,
     currentLocation,
     currentAction,
-    userMessage, 
+    userMessage,
     updatedHistory,
     companionName,
     userName,
     reply
   );
 
-  // Use final context that includes companion's actions
+  updateProgress({ progress: 80 });
+
+  // Step 4: Update DB (80-85%)
   const anyContextChanged =
     finalContext.outfit !== currentOutfit ||
     finalContext.location !== currentLocation ||
     finalContext.action !== currentAction;
 
   if (anyContextChanged) {
+    updateProgress({ currentStep: 'Saving context...' });
     await updateCompanionContext(
       companionId,
       finalContext.outfit,
@@ -89,10 +141,18 @@ export async function ChatWorkflow({
     );
   }
 
-  // Use final context that includes both user AND companion actions
+  updateProgress({ progress: 85 });
+
+  // Step 5: Generate image (85-100%)
   let imageUrl = null;
 
   if (shouldGenerateImage) {
+    updateProgress({
+      status: 'imaging',
+      progress: 85,
+      currentStep: 'Generating image...'
+    });
+
     imageUrl = await generateCompanionImage(
       companionId,
       finalContext.outfit,
@@ -104,7 +164,15 @@ export async function ChatWorkflow({
     );
   }
 
-  return {
+  // Final step
+  updateProgress({
+    status: 'completed',
+    progress: 100,
+    currentStep: 'Complete!',
+    imageUrl
+  });
+
+  const result: WorkflowResult = {
     text: reply,
     imageUrl: imageUrl,
     updatedState: {
@@ -114,4 +182,6 @@ export async function ChatWorkflow({
       expression: finalContext.expression
     }
   };
+
+  return result;
 }

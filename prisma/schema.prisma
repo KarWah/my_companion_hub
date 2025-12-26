@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -18,8 +19,8 @@ model User {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  @@index([email])
-  @@index([username])
+  // Note: @unique already creates indexes on email and username
+  // Removed redundant @@index([email]) and @@index([username])
 }
 
 model Companion {
@@ -35,30 +36,36 @@ model Companion {
   currentOutfit     String   @default("casual clothes")
   currentLocation   String   @default("living room")
   currentAction     String   @default("looking at viewer")
-  avatarUrl         String?  @db.Text // Deprecated - use headerImage instead
-  headerImage       String?  @db.Text // Base64 encoded header/profile image
+
+  // Image Storage (NEW: File system URLs instead of base64)
+  headerImageUrl    String?  // URL: /uploads/companions/{id}/headers/{imageId}.jpg
+  headerImageLegacy String?  @db.Text // DEPRECATED: Old base64 data (for migration only)
 
   // User relationship
   userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   messages          Message[]
+  workflowExecutions WorkflowExecution[]
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  @@index([userId])
+  // Optimized indexes for common query patterns
+  @@index([userId, createdAt(sort: Desc)]) // List user's companions (most recent first)
 }
 
 model Message {
   id           String    @id @default(uuid())
   role         String    // "user" | "assistant"
-  content      String    // Text content
+  content      String    @db.Text // Text content
   imageUrl     String?   // If an image was generated
   companionId  String
   companion    Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
   createdAt    DateTime  @default(now())
 
-  @@index([companionId])
+  // Optimized composite index for chat history queries
+  // Supports: WHERE companionId = ? ORDER BY createdAt DESC LIMIT 100
+  @@index([companionId, createdAt(sort: Desc)])
 }
 
 model RateLimit {
@@ -70,7 +77,28 @@ model RateLimit {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([identifier, action])
-  @@index([identifier])
+  @@unique([identifier, action]) // Already creates an index
+  // Optimized for cleanup queries: DELETE WHERE resetAt < NOW()
   @@index([resetAt])
+}
+
+model WorkflowExecution {
+  id            String   @id @default(uuid())
+  workflowId    String   @unique // Already creates an index
+  companionId   String
+  companion     Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  status        String   // "started" | "analyzing" | "responding" | "imaging" | "completed" | "failed"
+  progress      Int      @default(0) // 0-100
+  currentStep   String?
+  streamedText  String?  @db.Text // Accumulate streamed tokens
+  imageUrl      String?
+  error         String?  @db.Text
+  userMessageId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Optimized for finding active workflows for a companion
+  @@index([companionId, status, createdAt(sort: Desc)])
+  // For cleanup and analytics queries
+  @@index([createdAt])
 }

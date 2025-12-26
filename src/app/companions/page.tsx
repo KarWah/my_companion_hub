@@ -26,9 +26,9 @@ export default async function CompanionsPage() {
           >
             <div className="flex items-start justify-between mb-4">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center text-slate-300 overflow-hidden">
-                {c.headerImage ? (
+                {c.headerImageUrl ? (
                   <img
-                    src={c.headerImage}
+                    src={c.headerImageUrl}
                     alt={c.name}
                     className="w-full h-full object-cover"
                   />

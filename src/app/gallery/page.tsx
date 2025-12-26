@@ -55,9 +55,9 @@ export default async function GalleryPage() {
               <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-blue-500 transition-all">
                 {/* Header Image */}
                 <div className="aspect-[3/4] bg-slate-950 relative overflow-hidden">
-                  {companion.headerImage ? (
+                  {companion.headerImageUrl ? (
                     <img
-                      src={companion.headerImage}
+                      src={companion.headerImageUrl}
                       alt={companion.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />

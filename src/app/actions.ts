@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getAuthenticatedUser, verifyCompanionOwnership } from "@/lib/auth-helpers";
 import { checkCompanionCreationRateLimit, checkSettingsRateLimit } from "@/lib/rate-limit-db";
 import { validateBase64Image, sanitizeBase64Image } from "@/lib/image-validation";
+import { uploadImage, deleteCompanionImages } from "@/lib/storage";
 import type { ActionResult, Companion } from "@/types/prisma";
 
 
@@ -27,15 +28,16 @@ export async function createCompanion(formData: FormData) {
   const headerImageRaw = formData.get("headerImage") as string;
 
   // Server-side image validation (CRITICAL: client-side can be bypassed)
-  const headerImage = sanitizeBase64Image(headerImageRaw);
-  if (headerImage) {
-    const validation = validateBase64Image(headerImage);
+  const headerImageBase64 = sanitizeBase64Image(headerImageRaw);
+  if (headerImageBase64) {
+    const validation = validateBase64Image(headerImageBase64);
     if (!validation.valid) {
       throw new Error(`Invalid header image: ${validation.error}`);
     }
   }
 
-  await prisma.companion.create({
+  // Create companion first to get ID
+  const companion = await prisma.companion.create({
     data: {
       name,
       description,
@@ -43,10 +45,30 @@ export async function createCompanion(formData: FormData) {
       defaultOutfit: outfit,
       currentOutfit: outfit,
       userAppearance,
-      headerImage: headerImage || null,
       userId: user.id,
     },
   });
+
+  // Upload header image to file storage if provided
+  if (headerImageBase64) {
+    try {
+      const uploadResult = await uploadImage(
+        headerImageBase64,
+        companion.id,
+        'companion-header'
+      );
+
+      // Update companion with image URL
+      await prisma.companion.update({
+        where: { id: companion.id },
+        data: { headerImageUrl: uploadResult.url },
+      });
+    } catch (error) {
+      // If image upload fails, delete the companion and throw error
+      await prisma.companion.delete({ where: { id: companion.id } });
+      throw new Error(`Failed to upload header image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 
   revalidatePath("/companions");
   redirect("/companions");
@@ -96,9 +118,14 @@ export async function deleteCompanion(companionId: string): Promise<ActionResult
       return { success: false, error: rateLimit.error || "Too many settings changes. Please try again later." };
     }
 
+    // Delete all images from file storage
+    await deleteCompanionImages(companionId);
+
+    // Delete companion from database (cascades to messages and workflows)
     await prisma.companion.delete({
       where: { id: companionId },
     });
+
     revalidatePath("/companions");
 
     return { success: true };
@@ -126,14 +153,26 @@ export async function updateCompanion(id: string, formData: FormData) {
   const headerImageRaw = formData.get("headerImage") as string;
 
   // Server-side image validation (CRITICAL: client-side can be bypassed)
-  const headerImage = sanitizeBase64Image(headerImageRaw);
-  if (headerImage) {
-    const validation = validateBase64Image(headerImage);
+  const headerImageBase64 = sanitizeBase64Image(headerImageRaw);
+  let headerImageUrl: string | null = null;
+
+  if (headerImageBase64) {
+    const validation = validateBase64Image(headerImageBase64);
     if (!validation.valid) {
       throw new Error(`Invalid header image: ${validation.error}`);
     }
+
+    // Upload new header image
+    const uploadResult = await uploadImage(
+      headerImageBase64,
+      id,
+      'companion-header'
+    );
+
+    headerImageUrl = uploadResult.url;
   }
 
+  // Update companion
   await prisma.companion.update({
     where: { id },
     data: {
@@ -143,7 +182,7 @@ export async function updateCompanion(id: string, formData: FormData) {
       defaultOutfit: outfit,
       currentOutfit: outfit,
       userAppearance,
-      headerImage: headerImage || null,
+      ...(headerImageUrl && { headerImageUrl }), // Only update if new image provided
     },
   });
 

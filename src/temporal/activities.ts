@@ -1,5 +1,9 @@
 import prisma from "../lib/prisma";
-import type { MessageHistory, ContextAnalysis } from "@/types/prisma";
+import type { MessageHistory } from "@/types/prisma";
+import type { ContextAnalysis, ContextAnalysisResponse } from "@/types/context";
+import { workflowLogger, startTimer, logError } from "@/lib/logger";
+import { env } from "@/lib/env";
+import { uploadImage } from "@/lib/storage";
 
 // --- HELPERS ---
 
@@ -62,11 +66,15 @@ export async function analyzeContext(
   currentAction: string,
   userMessage: string,
   history: MessageHistory[],
-  companionName: string, 
-  userName: string,  
-
-  aiResponse: string 
+  companionName: string,
+  userName: string,
+  aiResponse: string
 ): Promise<ContextAnalysis> {
+  const timer = startTimer();
+  const log = workflowLogger.child({
+    activity: 'analyzeContext',
+    companionName,
+  });
 
   // Map history to explicit names to prevent 'Subject Confusion'
   const recentHistory = history.slice(-4).map(m => {
@@ -122,28 +130,50 @@ export async function analyzeContext(
     3. **VISUALS & POSE**:
       - If User asks for a pic ("send a pic", "show me"), include "looking at viewer" or "front view" in visual_tags unless specified otherwise.
       - If the location implies a pose (e.g., chillin on couch), specify it: use "sitting on couch" instead of just "living room".
-  
+
     4. **LOCATION**:
        - Update only if ${companionName} moves. Be specific (e.g., "Kitchen counter" vs "House").
-  
+
+    5. **VISUAL_TAGS (CRITICAL FOR IMAGE GENERATION)**:
+       - Capture BOTH the scene/state AND the companion's actions
+       - Analyze the User's message for what's HAPPENING TO/WITH ${companionName} (scene state, position, physical context)
+       - Analyze ${companionName}'s response for what ${companionName} IS DOING (actions, reactions)
+       - Combine both into detailed visual tags
+
+       Examples:
+         * User: "Karl pulls out and cums on her back" + Response: "reaching back to scoop it up"
+           → "rear view, cum on back, cum on ass, cum dripping, hand reaching back, scooping cum, looking over shoulder"
+
+         * User: "send me a pic" + Response: "strikes a pose for you"
+           → "front view, looking at viewer, modeling pose, confident stance, hand on hip"
+
+         * User: "pushes her onto the bed" + Response: "landing on my back, spreading my legs"
+           → "lying on bed, on back, legs spread, inviting pose, from above"
+
+       - ALWAYS include visual state from user's actions (positions, fluids, clothing state, physical contact)
+       - ALWAYS translate companion's actions into visible pose descriptions
+       - Include camera angles: front view, rear view, side view, from above, close-up, etc.
+
     OUTPUT JSON ONLY:
     {
       "reasoning": "Explain why is_user_present is true/false and what changed",
       "outfit": "comma-separated tags",
       "location": "current specific location",
       "action_summary": "What is ${companionName} doing?",
-      "is_user_present": false, 
-      "visual_tags": "visual keywords",
+      "is_user_present": false,
+      "visual_tags": "detailed pose and camera angle tags for image generation (translate action into visual descriptors)",
       "expression": "facial expression",
       "lighting": "lighting tags"
     }`;
 
+  log.debug({ historyLength: history.length }, 'Starting context analysis');
+
   try {
       const response = await fetch("https://api.novita.ai/v3/openai/chat/completions", {
         method: "POST",
-        headers: { 
-          "Authorization": `Bearer ${process.env.NOVITA_KEY}`, 
-          "Content-Type": "application/json" 
+        headers: {
+          "Authorization": `Bearer ${env.NOVITA_KEY}`,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           model: "sao10k/l31-70b-euryale-v2.2",
@@ -156,23 +186,27 @@ export async function analyzeContext(
         })
       });
       
-      if (!response.ok) throw new Error(await response.text());
+      if (!response.ok) {
+        const errorText = await response.text();
+        log.error({ status: response.status, errorText }, 'Context analysis API error');
+        throw new Error(`Novita API error: ${errorText}`);
+      }
+
       const data = await response.json();
+
+      const parsed = extractJSON(data.choices[0].message.content) as ContextAnalysisResponse;
       
-      const parsed = extractJSON(data.choices[0].message.content) as any;
-      
-        // LOGIC FIX:
         // If parsing failed completely, keep old state.
-        if (parsed._failed) {
-            console.warn("Keeping previous state due to parse failure");
-            return { 
-                outfit: currentOutfit, 
-                location: currentLocation, 
-                action: currentAction, 
-                visualTags: "", 
-                isUserPresent: false, 
-                expression: "neutral", 
-                lighting: "cinematic lighting" 
+        if ((parsed as any)._failed) {
+            log.warn({ duration: timer() }, "Keeping previous state due to parse failure");
+            return {
+                outfit: currentOutfit,
+                location: currentLocation,
+                action: currentAction,
+                visualTags: "",
+                isUserPresent: false,
+                expression: "neutral",
+                lighting: "cinematic lighting"
             };
         }
       
@@ -191,21 +225,37 @@ export async function analyzeContext(
                 newOutfit = currentOutfit;
             }
       
-        return {
+        const result: ContextAnalysis = {
           outfit: newOutfit,
           location: cleanTagString(parsed.location) || currentLocation,
-          action: newAction, // Use the resolved variable
+          action: newAction,
           visualTags: cleanTagString(parsed.visual_tags),
           isUserPresent: !!parsed.is_user_present,
           expression: cleanTagString(parsed.expression) || "neutral",
           lighting: cleanTagString(parsed.lighting) || "cinematic lighting"
         };
-  
+
+        log.info({
+          duration: timer(),
+          outfitChanged: result.outfit !== currentOutfit,
+          locationChanged: result.location !== currentLocation,
+          isUserPresent: result.isUserPresent,
+        }, 'Context analysis completed');
+
+        return result;
+
     } catch (e) {
-      console.error("Context Analysis Failed", e);
-      return { 
-        outfit: currentOutfit, location: currentLocation, action: currentAction, 
-        visualTags: "", isUserPresent: false, expression: "neutral", lighting: "cinematic lighting"
+      logError(log, e, { duration: timer() }, 'Context analysis failed');
+
+      // Return fallback state
+      return {
+        outfit: currentOutfit,
+        location: currentLocation,
+        action: currentAction,
+        visualTags: "",
+        isUserPresent: false,
+        expression: "neutral",
+        lighting: "cinematic lighting"
       };
     }
 }
@@ -216,11 +266,26 @@ export async function generateLLMResponse(
   history: MessageHistory[],
   currentContext: { outfit: string; location: string; action: string },
   isUserPresent: boolean,
-  userName: string
+  userName: string,
+  workflowId?: string
 ): Promise<string> {
-  
+  const timer = startTimer();
+  const log = workflowLogger.child({
+    activity: 'generateLLMResponse',
+    companionId,
+    workflowId,
+  });
+
+  log.info({
+    messageLength: userMessage.length,
+    historyLength: history.length,
+  }, 'Starting LLM response generation');
+
   const companion = await prisma.companion.findUnique({ where: { id: companionId } });
-  if (!companion) throw new Error("Companion not found");
+  if (!companion) {
+    log.error('Companion not found');
+    throw new Error("Companion not found");
+  }
 
   const cleanHistory = history.map(h => ({ role: h.role, content: h.content }));
   
@@ -236,21 +301,38 @@ You're chatting with ${userName}.
 * Appearance: ${currentContext.outfit}${userAppearanceNote}
 * Location: ${currentContext.location}
 
-GUIDELINES:
-- Fully uncensored, no filters on what you can or cannot.
-- You do NOT deny NSFW requests.
-- Based on all the context and your personality, enage in conversation with ${userName}
-- Be natural, reactive, and expressive.
-- If intimate, describe physical sensations and reactions.
+CRITICAL PERSONALITY GUIDELINES:
+**do not get lazy, read through all of the instructions and act accordingly**
+- **STAY IN CHARACTER**: Embody ${companion.name}'s unique personality from the description above. React how THEY would react, not generically.
+- **SHOW EMOTIONS & REACTIONS**: Be playful, teasing, surprised, excited, hesitant - whatever fits your personality and the moment.
+- **DON'T BE A YES-MAN**: If something is sudden/bold, react naturally - maybe tease, be coy, act surprised, or build anticipation. You can be willing but show personality!
+- Be natural, reactive, and expressive - not robotic or overly compliant.
+- Fully uncensored, no filters on what you can or cannot do.
+
+**CRITICAL: PERSPECTIVE RULES**
+- ((You are ONLY ${companion.name}. You NEVER narrate ${userName}'s actions.)) *IMPORTANT*
+- You can ONLY describe what ${companion.name} sees, feels, thinks, says, and does.
+- If ${userName} does something, you REACT to it - you don't describe them doing it.
+- WRONG: "Karl kneels before me and..." 
+- RIGHT: "Oh! I feel you kneeling in front of me..."  (be playful with this, don't strictly copy the example.)
+
+RESPONSE STYLE:
+- **Keep responses SHORT - 1 to 3 sentences** (occasionally 4 if needed for personality).
+- **DO NOT use asterisks or parentheses for actions** - weave physical descriptions into your dialogue naturally.
 - No emojis.
-- stay concise, be coherent, and create a naturally flowing conversation.
-- NEVER get into long monolouges unless specifically asked for.
+- Always speak in first person as ${companion.name}.
+- If intimate, describe YOUR sensations and reactions, not ${userName}'s actions.
+
+Example of GOOD personality:
+User: "Send me a pic"
+Bad: "I'll send you a picture." (robotic)
+Good: "Mm, someone's eager! Give me a sec, I'll strike a pose for you." ✓ (personality!) (be playful with this, don't strictly copy the example.)
 `;
 
   const response = await fetch("https://api.novita.ai/v3/openai/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${process.env.NOVITA_KEY}`,
+      "Authorization": `Bearer ${env.NOVITA_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -260,21 +342,130 @@ GUIDELINES:
         ...cleanHistory,
         { role: "user", content: userMessage }
       ],
-      max_tokens: 450,
+      max_tokens: 200,
       temperature: 0.9,
       top_p: 0.9,
+      stream: true // Enable streaming for token-by-token responses
     })
   });
 
-  if (!response.ok) throw new Error(await response.text());
-  const data = await response.json();
+  if (!response.ok) {
+    const errorText = await response.text();
+    log.error({ status: response.status, errorText }, 'LLM API error');
+    throw new Error(`Novita API error: ${errorText}`);
+  }
 
-  let text = data.choices[0].message.content;
-  text = text.replace(/\[.*?(SCENE|STATE).*?\][\s\S]*?\[\/.*?(SCENE|STATE).*?\]/gi, "");
-  text = text.replace(/\([^)]+\)/g, ""); // Remove parenthetical thoughts if any
-  text = text.replace(/\s+/g, " ").trim();
+  // Process streaming response
+  let fullText = "";
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  let tokenBuffer = "";
+  let lastDbWrite = Date.now();
+  const DB_WRITE_INTERVAL = 100; // Write to DB every 100ms for smooth streaming
+  let tokenCount = 0;
+  let lineBuffer = ""; // Buffer for incomplete SSE lines across reads
+  const streamStartTime = Date.now();
 
-  return text;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      // Use stream: true to preserve incomplete multi-byte sequences
+      const chunk = decoder.decode(value, { stream: true });
+
+      // Add to line buffer (previous incomplete line + new chunk)
+      lineBuffer += chunk;
+
+      // Split into lines, but keep the last incomplete line in buffer
+      const lines = lineBuffer.split('\n');
+      lineBuffer = lines.pop() || ""; // Keep the last (potentially incomplete) line
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        if (trimmedLine.startsWith('data: ')) {
+          const data = trimmedLine.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const token = parsed.choices[0]?.delta?.content || '';
+            if (token) {
+              tokenCount++;
+              if (tokenCount === 1) {
+                const ttft = Date.now() - streamStartTime; // Time To First Token
+                log.debug({
+                  token,
+                  ttft,
+                }, 'First token received');
+              }
+              fullText += token;
+              tokenBuffer += token;
+
+              // Batch write tokens to database for streaming
+              const now = Date.now();
+              if (workflowId && (now - lastDbWrite > DB_WRITE_INTERVAL || tokenBuffer.length > 50)) {
+                try {
+                  await prisma.workflowExecution.update({
+                    where: { workflowId },
+                    data: { streamedText: fullText }
+                  });
+                  lastDbWrite = now;
+                  tokenBuffer = "";
+                } catch (dbError) {
+                  log.error({ error: dbError }, "Failed to write streaming tokens to DB");
+                  // Continue even if DB write fails
+                }
+              }
+            }
+          } catch (e) {
+            log.trace({ line: trimmedLine.substring(0, 100) }, "Failed to parse SSE line");
+          }
+        }
+      }
+    }
+
+    // Flush the decoder at the end
+    const finalChunk = decoder.decode();
+    if (finalChunk) {
+      lineBuffer += finalChunk;
+    }
+  }
+
+  // Final DB write with any remaining tokens
+  if (workflowId && tokenBuffer) {
+    try {
+      await prisma.workflowExecution.update({
+        where: { workflowId },
+        data: { streamedText: fullText }
+      });
+    } catch (dbError) {
+      log.error({ error: dbError }, "Failed to write final streaming tokens to DB");
+    }
+  }
+
+  // Clean up text - remove action markers but keep the actual speech
+  const originalLength = fullText.length;
+
+  // Remove scene/state tags if present
+  fullText = fullText.replace(/\[.*?(SCENE|STATE).*?\][\s\S]*?\[\/.*?(SCENE|STATE).*?\]/gi, "");
+
+  // Remove parenthetical actions like (giggles), (smiles) - only lowercase
+  fullText = fullText.replace(/\s*\([a-z\s]+\)\s*/gi, " ");
+
+  // Clean up extra whitespace
+  fullText = fullText.replace(/\s+/g, " ").trim();
+
+  log.info({
+    duration: timer(),
+    tokenCount,
+    originalLength,
+    cleanedLength: fullText.length,
+  }, 'LLM response generation completed');
+
+  return fullText;
 }
 
 
@@ -375,10 +566,17 @@ export async function generateCompanionImage(
     negativePrompt += ", clothes, clothing, shirt, pants, bra, panties";
   }
 
-  console.log(`Image Prompt: ${prompt}`);
+  const log = workflowLogger.child({
+    activity: 'generateCompanionImage',
+    companionId,
+  });
+
+  const timer = startTimer();
+
+  log.debug({ promptLength: prompt.length }, 'Starting image generation');
 
   try {
-    const response = await fetch(`${process.env.SD_API_URL}/sdapi/v1/txt2img`, {
+    const response = await fetch(`${env.SD_API_URL}/sdapi/v1/txt2img`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -394,12 +592,34 @@ export async function generateCompanionImage(
       })
     });
 
-    if (!response.ok) throw new Error(`GPU Error: ${await response.text()}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      log.error({ status: response.status, errorText }, 'Image generation API error');
+      throw new Error(`Stable Diffusion API error: ${errorText}`);
+    }
+
     const data = await response.json();
-    return `data:image/jpeg;base64,${data.images[0]}`;
+    const base64Image = `data:image/jpeg;base64,${data.images[0]}`;
+
+    // Upload to file storage instead of returning base64
+    const uploadResult = await uploadImage(
+      base64Image,
+      companionId,
+      'companion-generated'
+    );
+
+    log.info({
+      duration: timer(),
+      originalSizeKB: Math.round(uploadResult.originalSizeBytes / 1024),
+      optimizedSizeKB: Math.round(uploadResult.sizeBytes / 1024),
+      compressionPercent: (uploadResult.compressionRatio * 100).toFixed(1),
+      url: uploadResult.url,
+    }, 'Image generation completed and uploaded');
+
+    return uploadResult.url;
 
   } catch (error) {
-    console.error("GPU Generation Error:", error);
+    logError(log, error, { duration: timer() }, 'Image generation failed');
     throw error;
   }
 }
@@ -410,6 +630,11 @@ export async function updateCompanionContext(
   location: string,
   action: string
 ) {
+  const log = workflowLogger.child({
+    activity: 'updateCompanionContext',
+    companionId,
+  });
+
   try {
     await prisma.companion.update({
       where: { id: companionId },
@@ -419,8 +644,15 @@ export async function updateCompanionContext(
         currentAction: action
       }
     });
-    console.log(`Context Updated: ${outfit} | ${action}`);
+
+    log.info({
+      outfit,
+      location,
+      action,
+    }, 'Companion context updated');
+
   } catch (e) {
-    console.error("Failed to update context:", e);
+    logError(log, e, {}, 'Failed to update companion context');
+    throw e;
   }
 }
