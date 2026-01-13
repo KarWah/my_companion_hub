@@ -1,6 +1,6 @@
 export default function RegisterLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
       <div className="w-full max-w-md">
         {/* Logo skeleton */}
         <div className="text-center mb-8">

@@ -3,14 +3,45 @@
 @tailwind utilities;
 
 :root {
-  --background: #0f172a; 
-  --foreground: #e2e8f0; 
-  --sidebar: #1e293b;    
-  --chat-bubble-user: #3b82f6; 
-  --chat-bubble-bot: #334155;  
+  --background: #18181b;
+  --foreground: #fafafa;
+  --sidebar: #27272a;
+  --card-bg: #27272a;
+  --card-border: #3f3f46;
+  --chat-bubble-user: linear-gradient(135deg, #ec4899, #d946ef);
+  --chat-bubble-bot: #3f3f46;
+  --primary: #ec4899;
+  --primary-hover: #db2777;
+  --accent: #d946ef;
+  --accent-hover: #c026d3;
+  --glow-color: rgba(236, 72, 153, 0.4);
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
+}
+
+/* Utility classes for pink/purple theme */
+@layer utilities {
+  .btn-gradient {
+    background: linear-gradient(135deg, #ec4899, #d946ef);
+    transition: transform 0.2s, box-shadow 0.3s;
+  }
+
+  .btn-gradient:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+  }
+
+  .glow-border {
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .glow-border:focus {
+    border-color: #ec4899;
+    box-shadow: 0 0 15px rgba(236, 72, 153, 0.3);
+  }
 }

@@ -1,3 +1,4 @@
+import type { WorkflowProgress, ChatWorkflowArgs, WorkflowResult } from '@/types';
 import { proxyActivities, defineQuery, defineSignal, setHandler, workflowInfo } from '@temporalio/workflow';
 import type * as activities from './activities';
 
@@ -16,7 +17,6 @@ const {
   },
 });
 
-import type { WorkflowProgress, ChatWorkflowArgs, WorkflowResult } from '@/types/workflow';
 
 export const progressQuery = defineQuery<WorkflowProgress>('progress');
 export const textTokenSignal = defineSignal<[string]>('textToken');

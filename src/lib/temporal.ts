@@ -14,6 +14,7 @@
 
 import { Connection, Client } from '@temporalio/client';
 import { env } from './env';
+import { logger } from './logger';
 
 // Singleton instances (shared across all requests)
 let connection: Connection | null = null;
@@ -49,7 +50,7 @@ export async function getTemporalClient(): Promise<Client> {
 
     client = new Client({ connection });
 
-    console.log(`✓ Temporal connection established (${env.TEMPORAL_ADDRESS})`);
+    logger.info({ address: env.TEMPORAL_ADDRESS }, 'Temporal connection established');
 
     return client;
 
@@ -58,7 +59,7 @@ export async function getTemporalClient(): Promise<Client> {
     connection = null;
     client = null;
 
-    console.error('Failed to connect to Temporal:', error);
+    logger.error({ error, address: env.TEMPORAL_ADDRESS }, 'Failed to connect to Temporal');
     throw new Error(
       `Could not connect to Temporal server at ${env.TEMPORAL_ADDRESS}. ` +
       'Please ensure Temporal is running (docker-compose up -d)'
@@ -78,9 +79,9 @@ export async function closeTemporalConnection(): Promise<void> {
   if (connection) {
     try {
       await connection.close();
-      console.log('✓ Temporal connection closed');
+      logger.info('Temporal connection closed');
     } catch (error) {
-      console.error('Error closing Temporal connection:', error);
+      logger.error({ error }, 'Error closing Temporal connection');
     } finally {
       connection = null;
       client = null;
@@ -101,7 +102,7 @@ export function isTemporalConnected(): boolean {
 // Graceful shutdown handler
 if (typeof process !== 'undefined') {
   const shutdownHandler = async () => {
-    console.log('Shutting down Temporal connection...');
+    logger.info('Shutting down Temporal connection');
     await closeTemporalConnection();
   };
 

@@ -5,7 +5,8 @@ import { hashPassword } from "@/lib/auth-helpers";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { checkRegistrationRateLimit, getClientIp } from "@/lib/rate-limit-db";
-import type { ActionResult } from "@/types/prisma";
+import { authLogger } from "@/lib/logger";
+import type { ActionResult } from "@/types";
 
 export async function registerUser(formData: FormData): Promise<ActionResult> {
   // Rate limiting check
@@ -62,7 +63,7 @@ export async function registerUser(formData: FormData): Promise<ActionResult> {
       }
     });
   } catch (error) {
-    console.error("Registration error:", error);
+    authLogger.error({ error, username }, "Registration error");
     return { success: false, error: "An unexpected error occurred. Please try again." };
   }
 

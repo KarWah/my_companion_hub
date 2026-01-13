@@ -1,11 +1,16 @@
-import { createCompanion } from "@/app/actions";
-import { CompanionForm } from "@/components/companion-form";
+// app/companion/new/page.tsx
+import { createCompanion } from "@/app/actions"; // Your existing server action
+import { CompanionWizard } from "@/components/wizard";
 
 export default function NewCompanionPage() {
   return (
-    <div className="max-w-3xl mx-auto p-8">
-      <h1 className="text-3xl font-bold text-white mb-8">Create Companion</h1>
-      <CompanionForm action={createCompanion} submitLabel="Create Companion" />
+    <div className="min-h-screen text-white py-12 px-4">
+       {/* You can keep your header here */}
+       <h1 className="text-4xl font-black text-center mb-12 text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">
+         Companion Creator
+       </h1>
+       
+       <CompanionWizard action={createCompanion} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { generateImage } from "@/app/image-actions";
 import { Copy, Download } from "lucide-react";
 import { ErrorBoundary } from "@/components/error-boundary";
+import type { ArtStyle } from "@/types/index";
 
 const SAMPLERS = [
   "DPM++ 2M",
@@ -20,6 +21,7 @@ const SAMPLERS = [
 ];
 
 export default function GeneratePage() {
+  const [style, setStyle] = useState<ArtStyle>("anime");
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("EasyNegative, (worst quality:1.2), 3d, sketch, (bad anatomy), text");
   const [width, setWidth] = useState(832);
@@ -50,7 +52,8 @@ export default function GeneratePage() {
       steps,
       cfg_scale: cfgScale,
       seed,
-      sampler_name: sampler
+      sampler_name: sampler,
+      style // Pass selected style to use appropriate checkpoint
     });
 
     setGenerating(false);
@@ -91,6 +94,39 @@ export default function GeneratePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Controls */}
         <div className="space-y-6">
+          {/* Style Selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-3">
+              Art Style
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setStyle("anime")}
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  style === "anime"
+                    ? "border-blue-500 bg-blue-500/20 text-white"
+                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700"
+                }`}
+              >
+                <div className="font-bold mb-1">🎨 Anime</div>
+                <div className="text-xs opacity-75">Vibrant, illustrated style</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStyle("realistic")}
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  style === "realistic"
+                    ? "border-blue-500 bg-blue-500/20 text-white"
+                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700"
+                }`}
+              >
+                <div className="font-bold mb-1">📷 Realistic</div>
+                <div className="text-xs opacity-75">Photorealistic, detailed</div>
+              </button>
+            </div>
+          </div>
+
           {/* Prompt */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -101,8 +137,17 @@ export default function GeneratePage() {
               onChange={(e) => setPrompt(e.target.value)}
               rows={4}
               className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
-              placeholder="(masterpiece), 1girl, blue eyes, long hair..."
+              placeholder={
+                style === "anime"
+                  ? "(masterpiece), 1girl, blue eyes, long hair..."
+                  : "professional photo of a woman, 8k uhd, dslr, soft lighting..."
+              }
             />
+            <p className="text-xs text-slate-500 mt-1">
+              {style === "anime"
+                ? "Quality tags and LoRA will be automatically added based on Anime style"
+                : "Quality tags will be automatically added based on Realistic style"}
+            </p>
           </div>
 
           {/* Negative Prompt */}

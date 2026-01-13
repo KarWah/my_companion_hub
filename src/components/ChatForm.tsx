@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { sendMessage, finalizeMessage } from "@/app/chat-actions";
 import { useState, useEffect, useTransition, useRef } from "react";
 import { useWorkflowStream } from "@/hooks/useWorkflowStream";
+import type { StreamState } from "@/types";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -13,7 +14,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className="p-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 hover:shadow-glow-pink text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {pending ? (
         <div className="animate-spin h-[18px] w-[18px] border-2 border-white border-t-transparent rounded-full" />
@@ -33,7 +34,7 @@ export function ChatForm({
 }: {
   companionId: string;
   companionName: string;
-  onStreamUpdate?: (state: any) => void;
+  onStreamUpdate?: (state: StreamState) => void;
   onMessageSent?: (message: string) => void;
   onWorkflowComplete?: () => void;
 }) {
@@ -86,13 +87,13 @@ export function ChatForm({
       <form
         ref={formRef}
         action={handleSubmit}
-        className="flex gap-2 items-center bg-slate-900 p-2 rounded-xl border border-slate-800 focus-within:border-blue-500 transition-colors"
+        className="flex gap-2 items-center bg-slate-800/50 p-2 rounded-2xl border border-slate-700 focus-within:border-pink-500 focus-within:shadow-glow-pink transition-all"
       >
         <input type="hidden" name="companionId" value={companionId} />
 
         <div className="relative group">
           <input type="checkbox" name="generateImage" id="genImg" className="peer sr-only" />
-          <label htmlFor="genImg" className="p-2 text-slate-400 peer-checked:text-blue-400 hover:text-white cursor-pointer">
+          <label htmlFor="genImg" className="p-2 text-slate-400 peer-checked:text-pink-400 hover:text-white cursor-pointer transition-colors">
             <ImageIcon size={20} />
           </label>
           <span className="absolute -top-8 left-0 text-xs bg-black text-white p-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap">
@@ -114,14 +115,14 @@ export function ChatForm({
 
       {/* Progress UI */}
       {workflowId && !streamState.isComplete && (
-        <div className="mt-2 p-3 bg-slate-800 rounded-lg space-y-2">
+        <div className="mt-2 p-3 bg-slate-800/80 rounded-lg space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-300">{streamState.currentStep}</span>
             <span className="text-xs text-slate-400">{streamState.progress}%</span>
           </div>
           <div className="w-full bg-slate-700 rounded-full h-2">
             <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              className="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${streamState.progress}%` }}
             />
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import type { StreamState, WorkflowResult } from '@/types/workflow';
+import type { StreamState, WorkflowResult } from '@/types';
 
 export function useWorkflowStream(workflowId: string | null): StreamState {
   const [state, setState] = useState<StreamState>({
@@ -84,9 +84,10 @@ export function useWorkflowStream(workflowId: string | null): StreamState {
         eventSource?.close();
       });
 
-      eventSource.addEventListener('error', (e: any) => {
+      eventSource.addEventListener('error', (e: Event) => {
         try {
-          const data = JSON.parse(e.data || '{}');
+          const messageEvent = e as MessageEvent;
+          const data = JSON.parse(messageEvent.data || '{}');
           setState(prev => ({
             ...prev,
             error: data.error || 'Stream error',

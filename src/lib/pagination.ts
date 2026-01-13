@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import type { Message } from "@prisma/client";
+import type { Message, Prisma } from "@prisma/client";
 
 export interface PaginationParams {
   cursor?: string;
@@ -21,7 +21,7 @@ export interface PaginatedResult<T> {
  * @returns Paginated result with items and next cursor
  */
 export async function paginateMessages(
-  where: any,
+  where: Prisma.MessageWhereInput,
   params: PaginationParams
 ): Promise<PaginatedResult<Message>> {
   const limit = params.limit || 24; // Default to 24 images (4x6 grid)
@@ -55,6 +55,6 @@ export async function paginateMessages(
  * @param where - Prisma where clause
  * @returns Total count
  */
-export async function getMessageCount(where: any): Promise<number> {
+export async function getMessageCount(where: Prisma.MessageWhereInput): Promise<number> {
   return await prisma.message.count({ where });
 }

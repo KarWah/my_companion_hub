@@ -4,7 +4,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+enum ArtStyle {
+  anime
+  realistic
 }
 
 model User {
@@ -31,6 +35,14 @@ model Companion {
   visualDescription String   @db.Text // Physical Body Prompt (Renamed from basePrompt)
   userAppearance    String?  @db.Text // How the user looks
 
+  // Identity fields (NEW: separate storage for editing)
+  relationship         String   @default("Stranger") // Relationship to user
+  hobbies              String[] // Array of hobbies/interests
+  fetishes             String[] // Array of fetishes/kinks
+  occupation           String   @default("Student") // Occupation/role
+  personalityArchetype String   @default("Adventurous") // Personality type
+  style                ArtStyle @default(anime) // Art style for image generation
+
   // Dynamic State
   defaultOutfit     String   @default("casual clothes") // Original outfit to restore on memory wipe
   currentOutfit     String   @default("casual clothes")
@@ -40,6 +52,9 @@ model Companion {
   // Image Storage (NEW: File system URLs instead of base64)
   headerImageUrl    String?  // URL: /uploads/companions/{id}/headers/{imageId}.jpg
   headerImageLegacy String?  @db.Text // DEPRECATED: Old base64 data (for migration only)
+
+  // Extended Personality (JSON string with additional personality fields)
+  extendedPersonality String? @db.Text // JSON: { speechStyle, speechPattern, behaviorTraits, etc. }
 
   // User relationship
   userId            String

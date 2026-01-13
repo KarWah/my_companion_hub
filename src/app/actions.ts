@@ -7,7 +7,8 @@ import { getAuthenticatedUser, verifyCompanionOwnership } from "@/lib/auth-helpe
 import { checkCompanionCreationRateLimit, checkSettingsRateLimit } from "@/lib/rate-limit-db";
 import { validateBase64Image, sanitizeBase64Image } from "@/lib/image-validation";
 import { uploadImage, deleteCompanionImages } from "@/lib/storage";
-import type { ActionResult, Companion } from "@/types/prisma";
+import { logger } from "@/lib/logger";
+import type { ActionResult, Companion } from "@/types/index";
 
 
 
@@ -23,8 +24,17 @@ export async function createCompanion(formData: FormData) {
   const name = formData.get("name") as string;
   const description = formData.get("description") as string;
   const visualDescription = formData.get("visualDescription") as string;
+  const style = formData.get("style") as 'anime' | 'realistic'; // NEW: Art style for checkpoint selection
   const outfit = formData.get("currentOutfit") as string;
   const userAppearance = formData.get("userAppearance") as string;
+  const relationship = formData.get("relationship") as string;
+  const hobbiesRaw = formData.get("hobbies") as string;
+  const hobbies = hobbiesRaw ? JSON.parse(hobbiesRaw) : [];
+  const fetishesRaw = formData.get("fetishes") as string;
+  const fetishes = fetishesRaw ? JSON.parse(fetishesRaw) : [];
+  const occupation = formData.get("occupation") as string;
+  const personalityArchetype = formData.get("personalityArchetype") as string;
+  const extendedPersonality = formData.get("extendedPersonality") as string;
   const headerImageRaw = formData.get("headerImage") as string;
 
   // Server-side image validation (CRITICAL: client-side can be bypassed)
@@ -42,9 +52,16 @@ export async function createCompanion(formData: FormData) {
       name,
       description,
       visualDescription,
+      style, // NEW: Store art style for checkpoint selection
       defaultOutfit: outfit,
       currentOutfit: outfit,
       userAppearance,
+      relationship,
+      hobbies,
+      fetishes,
+      occupation,
+      personalityArchetype,
+      extendedPersonality: extendedPersonality || null,
       userId: user.id,
     },
   });
@@ -130,7 +147,7 @@ export async function deleteCompanion(companionId: string): Promise<ActionResult
 
     return { success: true };
   } catch (error) {
-    console.error("Delete companion error:", error);
+    logger.error({ error, companionId }, "Delete companion error");
     return { success: false, error: "Failed to delete companion" };
   }
 }
@@ -148,12 +165,26 @@ export async function updateCompanion(id: string, formData: FormData) {
   const name = formData.get("name") as string;
   const description = formData.get("description") as string;
   const visualDescription = formData.get("visualDescription") as string;
+  const style = formData.get("style") as 'anime' | 'realistic'; // NEW: Art style for checkpoint selection
   const outfit = formData.get("currentOutfit") as string;
   const userAppearance = formData.get("userAppearance") as string;
+  const relationship = formData.get("relationship") as string;
+  const hobbiesRaw = formData.get("hobbies") as string;
+  const hobbies = hobbiesRaw ? JSON.parse(hobbiesRaw) : [];
+  const fetishesRaw = formData.get("fetishes") as string;
+  const fetishes = fetishesRaw ? JSON.parse(fetishesRaw) : [];
+  const occupation = formData.get("occupation") as string;
+  const personalityArchetype = formData.get("personalityArchetype") as string;
+  const extendedPersonality = formData.get("extendedPersonality") as string;
   const headerImageRaw = formData.get("headerImage") as string;
 
-  // Server-side image validation (CRITICAL: client-side can be bypassed)
-  const headerImageBase64 = sanitizeBase64Image(headerImageRaw);
+  // Check if the raw input is a URL (existing image) or empty
+  // If it starts with 'http' or '/', it's an existing image, so we treat it as "no upload"
+  const isExistingImage = headerImageRaw && (headerImageRaw.startsWith('http') || headerImageRaw.startsWith('/'));
+  
+  // Only sanitize if it's NOT an existing image
+  const headerImageBase64 = !isExistingImage ? sanitizeBase64Image(headerImageRaw) : null;
+  
   let headerImageUrl: string | null = null;
 
   if (headerImageBase64) {
@@ -179,10 +210,17 @@ export async function updateCompanion(id: string, formData: FormData) {
       name,
       description,
       visualDescription,
+      style, // NEW: Update art style for checkpoint selection
       defaultOutfit: outfit,
       currentOutfit: outfit,
       userAppearance,
-      ...(headerImageUrl && { headerImageUrl }), // Only update if new image provided
+      relationship,
+      hobbies,
+      fetishes,
+      occupation,
+      personalityArchetype,
+      extendedPersonality: extendedPersonality || null,
+      ...(headerImageUrl && { headerImageUrl }), // Only updates image if a NEW one was uploaded
     },
   });
 

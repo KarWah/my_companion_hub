@@ -1,1379 +1,371 @@
-# My Companion Hub - Comprehensive Technical Documentation
+# Companion Hub - Technical Documentation
 
 ## Table of Contents
-
-1. [Project Overview](#1-project-overview)
-2. [Technology Stack](#2-technology-stack)
-3. [Project Structure](#3-project-structure)
-4. [Database Schema](#4-database-schema)
-5. [Features & Functionality](#5-features--functionality)
-6. [Architecture & Data Flow](#6-architecture--data-flow)
-7. [External Integrations](#7-external-integrations)
-8. [Configuration System](#8-configuration-system)
-9. [Authentication & Authorization](#9-authentication--authorization)
-10. [Temporal Workflows](#10-temporal-workflows)
-11. [Type System](#11-type-system)
-12. [Environment Setup](#12-environment-setup)
-13. [Development Guide](#13-development-guide)
-14. [Deployment](#14-deployment)
-15. [API Reference](#15-api-reference)
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Tech Stack](#tech-stack)
+4. [Database Schema](#database-schema)
+5. [Authentication System](#authentication-system)
+6. [Chat & Workflow System](#chat--workflow-system)
+7. [Temporal Workflows](#temporal-workflows)
+8. [Image Generation](#image-generation)
+9. [Rate Limiting](#rate-limiting)
+10. [Security](#security)
+11. [API Reference](#api-reference)
+12. [Configuration](#configuration)
+13. [Development Guide](#development-guide)
 
 ---
 
-## 1. Project Overview
+## Overview
 
-**My Companion Hub** is a sophisticated Next.js application that enables users to create and interact with AI-powered companions. The application features persistent contextual chat, dynamic image generation, and workflow orchestration through Temporal.
+**Companion Hub** is a production-ready, self-hosted AI companion chat application that enables users to create and interact with personalized AI companions. The application features real-time streaming chat, AI-generated images using Stable Diffusion, and dynamic context tracking for immersive conversations.
 
 ### Key Features
-
-- **AI Companions**: Create customized AI companions with unique personalities and appearances
-- **Contextual Chat**: Persistent conversations with context-aware responses
-- **Dynamic State Tracking**: Companions track outfit, location, and current actions
-- **Image Generation**: Stable Diffusion-powered image generation with contextual prompts
-- **Image Gallery**: Paginated gallery to browse and manage generated images (24 per page)
-- **User Authentication**: Secure account management with NextAuth.js
-- **Memory Management**: Reset companion context and wipe conversation history
-- **Rate Limiting**: Database-backed rate limiting to prevent abuse and ensure fair usage
-- **File Upload Validation**: Client and server-side validation for image uploads
-- **Error Boundaries**: Graceful error handling with user-friendly error pages
-
-### Primary Use Cases
-
-1. Creating and managing AI companions with custom personalities
-2. Engaging in persistent, context-aware conversations
-3. Generating contextual images of companions in various settings
-4. Managing and viewing generated image galleries
-5. Customizing companion appearance and behavior
+- **Personalized AI Companions**: Create companions with custom personalities, appearances, and behaviors
+- **Streaming Chat**: Real-time message streaming with visual context awareness
+- **AI Image Generation**: Automatic companion image generation based on conversation context
+- **Dynamic State Tracking**: Companions remember and update their outfit, location, and current action
+- **Multi-user Support**: Secure authentication with user isolation
+- **Gallery**: View all AI-generated images
+- **Rate Limiting**: Comprehensive protection against abuse
 
 ---
 
-## 2. Technology Stack
+## Architecture
+
+### System Design
+
+Companion Hub follows a modern serverless architecture using Next.js 16 with the App Router pattern:
+
+```
+┌─────────────────┐
+│   Next.js App   │
+│   (Frontend)    │
+└────────┬────────┘
+         │
+         ├─── Server Actions (actions.ts, chat-actions.ts, auth-actions.ts)
+         │
+         ├─── API Routes (/api/auth, /api/chat/stream)
+         │
+         ├─── NextAuth v5 (Authentication)
+         │
+         └─── Temporal.io (Workflow Engine)
+                    │
+                    ├─── Activities (LLM, Image Gen, DB Updates)
+                    │
+                    └─── Workflows (ChatWorkflow)
+                             │
+                             ├─── Novita AI (LLM API)
+                             ├─── Stable Diffusion (Image API)
+                             └─── PostgreSQL (Data Storage)
+```
+
+### Data Flow: Sending a Message
+
+```
+User types message → ChatForm
+  ↓
+calls sendMessage() Server Action
+  ↓
+Creates:
+  - User Message record
+  - WorkflowExecution record
+  - Temporal ChatWorkflow started
+  ↓
+Returns workflowId immediately (optimistic UI update)
+  ↓
+Frontend subscribes to SSE endpoint: /api/chat/stream/[workflowId]
+  ↓
+SSE polls database every 100ms for:
+  - Streamed tokens (AI response text)
+  - Progress updates (0-100%)
+  - Status changes
+  ↓
+Temporal Workflow runs 5 steps:
+  1. Analyzing context
+  2. Generating LLM response (streaming tokens to DB)
+  3. Re-analyzing final context
+  4. Updating companion state
+  5. Generating companion image (optional)
+  ↓
+Workflow completes → SSE sends "complete" event
+  ↓
+Frontend calls finalizeMessage()
+  ↓
+Saves assistant Message record
+  ↓
+Page revalidates, shows real message from DB
+```
+
+---
+
+## Tech Stack
 
 ### Frontend
-- **Next.js 16.0.8** - React framework with App Router
-- **React 19.2.1** - UI library
-- **TypeScript 5.9.3** - Type-safe development
-- **Tailwind CSS 3.4.1** - Utility-first styling
-- **lucide-react 0.558.0** - Icon library
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Next.js | 16.0.x | React framework with App Router |
+| React | 19.x | UI library |
+| TypeScript | 5.9.x | Type safety |
+| Tailwind CSS | 3.x | Utility-first styling |
+| Lucide React | Latest | Icon library |
 
 ### Backend
-- **Next.js Server Actions** - Server-side operations
-- **Prisma ORM 7.1.0** - Database toolkit
-- **PostgreSQL** - Primary database (via @prisma/adapter-pg 7.1.0)
-- **pg 8.16.3** - PostgreSQL driver
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Next.js Server Actions | 16.0.x | Type-safe API layer |
+| NextAuth | 5.x (Beta) | Authentication |
+| Prisma | 7.x | ORM for PostgreSQL |
+| PostgreSQL | 15+ | Primary database |
+| Temporal.io | 1.13.x | Workflow orchestration |
+| Pino | Latest | Structured logging |
 
-### Authentication
-- **NextAuth.js v5.0.0-beta.30** - Authentication framework
-- **@auth/prisma-adapter 2.11.1** - Prisma adapter for NextAuth
-- **bcryptjs 3.0.3** - Password hashing
+### AI/ML Services
+| Service | Purpose |
+|---------|---------|
+| Novita AI API | LLM inference (sao10k/l31-70b-euryale-v2.2 model) |
+| Stable Diffusion Forge | Image generation (832x1216 portraits) |
 
-### AI Services
-- **Novita AI API** - 70B LLM (sao10k/l31-70b-euryale-v2.2)
-- **Stable Diffusion Forge** - Image generation (txt2img)
-
-### Orchestration
-- **Temporal.io v1.13.2** - Workflow orchestration
-  - @temporalio/activity
-  - @temporalio/client
-  - @temporalio/worker
-  - @temporalio/workflow
-
-### Validation & Utilities
-- **Zod 4.2.0** - Schema validation
-- **nanoid 3.3.7** - Unique ID generation
-- **clsx 2.1.1** - Conditional class names
-- **tailwind-merge 3.4.0** - Merge Tailwind classes
-- **dotenv 17.2.3** - Environment variables
+### Infrastructure
+| Technology | Purpose |
+|------------|---------|
+| Docker Compose | Local development environment |
+| Sharp | Image optimization (mozjpeg compression) |
+| bcryptjs | Password hashing |
+| Zod | Runtime validation |
+| nanoid | UUID generation |
 
 ---
 
-## 3. Project Structure
+## Database Schema
+
+### Entity Relationship Diagram
 
 ```
-my-companion-hub/
-├── prisma/
-│   ├── schema.prisma              # Database models (User, Companion, Message)
-│   └── seed.ts                    # Database seeding script
-│
-├── src/
-│   ├── app/                       # Next.js App Router
-│   │   ├── layout.tsx             # Root layout with providers
-│   │   ├── page.tsx               # Main chat interface
-│   │   ├── globals.css            # Global styles
-│   │   ├── error.tsx              # Global error boundary
-│   │   │
-│   │   ├── actions.ts             # Companion CRUD server actions
-│   │   ├── chat-actions.ts        # Chat & Temporal workflow actions
-│   │   ├── image-actions.ts       # Image generation actions
-│   │   ├── auth-actions.ts        # User registration actions
-│   │   │
-│   │   ├── api/
-│   │   │   └── auth/[...nextauth]/route.ts  # NextAuth handler
-│   │   │
-│   │   ├── companions/
-│   │   │   ├── page.tsx           # Companion list
-│   │   │   ├── new/page.tsx       # Create companion
-│   │   │   ├── [id]/edit/page.tsx # Edit companion
-│   │   │   ├── loading.tsx        # Loading state
-│   │   │   └── error.tsx          # Error boundary
-│   │   │
-│   │   ├── gallery/
-│   │   │   ├── page.tsx           # Gallery overview
-│   │   │   ├── [id]/page.tsx      # Companion gallery detail
-│   │   │   ├── loading.tsx        # Loading state
-│   │   │   └── error.tsx          # Error boundary
-│   │   │
-│   │   ├── generate/
-│   │   │   ├── page.tsx           # Standalone image generator
-│   │   │   ├── loading.tsx        # Loading state
-│   │   │   └── error.tsx          # Error boundary
-│   │   │
-│   │   ├── login/
-│   │   │   ├── page.tsx           # Login form
-│   │   │   └── loading.tsx        # Loading state
-│   │   │
-│   │   ├── register/
-│   │   │   └── page.tsx           # Registration form
-│   │   │
-│   │   └── settings/
-│   │       ├── page.tsx           # Settings page
-│   │       ├── loading.tsx        # Loading state
-│   │       └── error.tsx          # Error boundary
-│   │
-│   ├── components/
-│   │   ├── ChatForm.tsx           # Chat input with image toggle
-│   │   ├── sidebar.tsx            # Navigation sidebar
-│   │   ├── providers.tsx          # NextAuth SessionProvider
-│   │   ├── error-boundary.tsx     # React error boundary
-│   │   ├── companion-form.tsx     # Create/edit companion form
-│   │   ├── delete-companion-button.tsx  # Delete with confirmation
-│   │   ├── image-cropper.tsx      # Canvas-based image cropping
-│   │   ├── image-gallery-grid.tsx # Gallery grid display
-│   │   └── settingsList.tsx       # Settings with memory wipe
-│   │
-│   ├── config/
-│   │   ├── generation.ts          # Image/LLM configuration
-│   │   ├── clothing-keywords.ts   # Outfit layering logic
-│   │   └── scene-enhancements.ts  # Location/lighting enhancements
-│   │
-│   ├── lib/
-│   │   ├── auth.ts                # NextAuth configuration
-│   │   ├── auth-helpers.ts        # Auth utility functions
-│   │   ├── prisma.ts              # Prisma singleton
-│   │   └── validation.ts          # Zod validation schemas
-│   │
-│   ├── temporal/
-│   │   ├── workflows.ts           # ChatWorkflow orchestration
-│   │   ├── activities.ts          # Temporal activities
-│   │   └── worker.ts              # Temporal worker process
-│   │
-│   └── types/
-│       ├── prisma.ts              # Type definitions
-│       └── next-auth.d.ts         # NextAuth type extensions
-│
-├── .env                           # Environment variables
-├── .env.example                   # Environment template
-├── docker-compose.yml             # PostgreSQL & Temporal services
-├── next.config.js                 # Next.js configuration
-├── tailwind.config.ts             # Tailwind configuration
-├── tsconfig.json                  # TypeScript configuration
-├── package.json                   # Dependencies & scripts
-└── README.md                      # Project documentation
+User (1) ────────┐
+                 │
+                 │ (1:Many)
+                 ├─────> Companion (Many)
+                 │             │
+                 │             │ (1:Many)
+                 │             ├─────> Message (Many)
+                 │             │
+                 │             └─────> WorkflowExecution (Many)
+                 │
+                 └─────> RateLimit (Many)
 ```
 
----
+### Core Entities
 
-## 4. Database Schema
-
-### User Model
-
+#### User
 ```prisma
 model User {
   id              String      @id @default(uuid())
   email           String      @unique
   username        String      @unique
-  name            String
+  name            String      // Display name shown to companions
   hashedPassword  String
-  companions      Companion[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
-
-  @@index([email])
-  @@index([username])
+  companions      Companion[]
 }
 ```
 
-**Purpose**: Store user account information with authentication credentials.
+**Key Fields:**
+- `email`: Unique, used for login
+- `username`: Unique, lowercase, used for login
+- `name`: How the user appears to companions (e.g., "Master", "John")
+- `hashedPassword`: bcrypt hash with 10 salt rounds
 
-**Fields**:
-- `id`: UUID primary key
-- `email`: Unique email address
-- `username`: Unique username (lowercase, alphanumeric + underscore)
-- `name`: Display name
-- `hashedPassword`: bcrypt-hashed password (10 rounds)
-- `companions`: One-to-many relationship with companions
-- `createdAt`: Account creation timestamp
-- `updatedAt`: Last modification timestamp
-
-**Indexes**: email, username for fast lookups
+**Indexes:**
+- Primary key: `id`
+- Unique: `email`, `username`
 
 ---
 
-### Companion Model
-
+#### Companion
 ```prisma
 model Companion {
-  id                  String    @id @default(uuid())
-  name                String
-  description         String    @db.Text
-  visualDescription   String    @db.Text
-  userAppearance      String?   @db.Text
-  defaultOutfit       String
-  currentOutfit       String
-  currentLocation     String
-  currentAction       String
-  avatarUrl           String?
-  headerImage         String?   @db.Text
+  id                  String              @id @default(uuid())
   userId              String
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages            Message[]
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  name                String              // e.g., "Luna"
+  description         String              // Personality (e.g., "Shy catgirl maid")
+  visualDescription   String              // Physical appearance for image gen
+  userAppearance      String?             // Optional: how user looks to companion
 
-  @@index([userId])
+  // Dynamic state (updated by AI)
+  defaultOutfit       String              // Starting outfit
+  currentOutfit       String              // Current outfit (can change)
+  currentLocation     String              // Current location
+  currentAction       String              // What companion is doing
+
+  // Images
+  headerImageUrl      String?             // Profile picture
+  headerImageLegacy   String?             // DEPRECATED: Old field for migration
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages            Message[]
+  workflowExecutions  WorkflowExecution[]
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 ```
 
-**Purpose**: Store companion definitions and dynamic state.
+**Key Fields:**
+- `description`: AI personality (e.g., "A playful, teasing fox spirit who loves pranks")
+- `visualDescription`: Physical tags for image generation (e.g., "1girl, fox ears, orange hair, amber eyes")
+- `currentOutfit`, `currentLocation`, `currentAction`: Dynamically updated by AI during conversations
+- `headerImageUrl`: User-uploaded profile picture
 
-**Fields**:
-- `id`: UUID primary key
-- `name`: Companion name (max 100 chars)
-- `description`: Personality traits and behavior (Text, min 10 chars)
-- `visualDescription`: Physical appearance for image generation (Text, min 10 chars)
-- `userAppearance`: Optional description of user's appearance (Text)
-- `defaultOutfit`: Initial outfit, used when resetting memory
-- `currentOutfit`: Dynamic state tracking current clothing
-- `currentLocation`: Dynamic state tracking current location
-- `currentAction`: Dynamic state tracking current activity
-- `avatarUrl`: Deprecated field (use headerImage)
-- `headerImage`: Base64-encoded profile image (Text, optional)
-- `userId`: Foreign key to User
-- `user`: Relation to User with cascade delete
-- `messages`: One-to-many relationship with messages
-- `createdAt`: Creation timestamp
-- `updatedAt`: Last modification timestamp
-
-**Dynamic State**: currentOutfit, currentLocation, and currentAction are updated through conversation context analysis.
-
-**Indexes**: userId for fast user-owned companion lookups
+**Indexes:**
+- Primary key: `id`
+- Composite: `[userId, createdAt DESC]` for efficient companion listing
 
 ---
 
-### Message Model
-
+#### Message
 ```prisma
 model Message {
-  id           String    @id @default(uuid())
-  role         String
-  content      String
-  imageUrl     String?
-  companionId  String
-  companion    Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
-  createdAt    DateTime  @default(now())
+  id          String    @id @default(uuid())
+  companionId String
+  role        String    // "user" | "assistant"
+  content     String    @db.Text
+  imageUrl    String?   // AI-generated image (optional)
+  createdAt   DateTime  @default(now())
 
-  @@index([companionId])
+  companion   Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+
+  @@index([companionId, createdAt(sort: Desc)])
 }
 ```
 
-**Purpose**: Store conversation history and generated images.
+**Key Fields:**
+- `role`: Either "user" (human message) or "assistant" (AI response)
+- `content`: Message text (can be long, stored as TEXT)
+- `imageUrl`: Optional URL to AI-generated image associated with this message
 
-**Fields**:
-- `id`: UUID primary key
-- `role`: Message sender ("user" | "assistant")
-- `content`: Text content of message
-- `imageUrl`: Generated image (base64 data URL or URL, optional)
-- `companionId`: Foreign key to Companion
-- `companion`: Relation to Companion with cascade delete
-- `createdAt`: Message timestamp
-
-**Indexes**: companionId for fast conversation retrieval
-
-**Storage**: Images stored as base64 data URLs directly in database (no separate storage service)
+**Indexes:**
+- Primary key: `id`
+- Composite: `[companionId, createdAt DESC]` for fast chat history queries
 
 ---
 
-## 5. Features & Functionality
+#### WorkflowExecution
+```prisma
+model WorkflowExecution {
+  id              String    @id @default(uuid())
+  workflowId      String    @unique // Temporal workflow ID
+  companionId     String
+  status          String    // "started" | "analyzing" | "responding" | "imaging" | "completed" | "failed"
+  progress        Int       @default(0) // 0-100
+  currentStep     String?   // Human-readable step (e.g., "Generating response...")
+  streamedText    String?   @db.Text // Accumulating tokens during streaming
+  imageUrl        String?   // Generated image URL (if applicable)
+  error           String?   @db.Text
+  userMessageId   String?   // Reference to the user message that triggered this
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-### 5.1 Chat System
+  companion       Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
 
-**Location**: `src/app/page.tsx`, `src/components/ChatForm.tsx`, `src/app/chat-actions.ts`
+  @@index([companionId, status, createdAt(sort: Desc)])
+  @@index([createdAt])
+}
+```
 
-#### Components
+**Key Fields:**
+- `workflowId`: Unique Temporal workflow ID (used for SSE streaming subscription)
+- `status`: Current workflow stage
+- `progress`: 0-100 percentage for UI progress bars
+- `streamedText`: AI response tokens accumulate here during generation (polled by SSE)
+- `imageUrl`: URL to generated image (if image generation was enabled)
 
-**ChatForm.tsx**:
-- Text input with send button
-- "Generate Image" checkbox toggle
-- Submits to `sendMessage` server action
-
-**page.tsx (Main Chat Interface)**:
-- Displays companion status bar (outfit, location, action)
-- Message history in reverse flex layout (newest at bottom)
-- User messages right-aligned (blue), AI messages left-aligned (purple)
-- Images displayed inline with messages
-- Auto-scroll to bottom on new messages
-
-#### Features
-
-1. **Real-time Chat**: Submit messages and receive AI responses
-2. **Context-Aware Responses**: AI maintains conversation context
-3. **Image Generation Toggle**: Optional image with each message
-4. **Message History**: Limited to 30 most recent messages
-5. **Companion State Display**: Shows current outfit, location, and action
-
-#### Data Flow
-
-1. User types message in ChatForm
-2. Form submits to `sendMessage()` server action
-3. Message validated with Zod schema
-4. User authenticated and ownership verified
-5. User message saved to database
-6. Temporal workflow initiated
-7. AI response generated and saved
-8. Page revalidated, UI updates
-
-**Code Location**: src/app/chat-actions.ts:17-118
+**Indexes:**
+- Primary key: `id`
+- Unique: `workflowId`
+- Composite: `[companionId, status, createdAt DESC]` for filtering active workflows
+- Single: `[createdAt]` for cleanup queries
 
 ---
 
-### 5.2 Companion Management
+#### RateLimit
+```prisma
+model RateLimit {
+  id         String   @id @default(uuid())
+  identifier String   // IP:action or userId:action
+  action     String   // "login", "register", "chat", "image", "companion_create", "settings"
+  count      Int      @default(1)
+  resetAt    DateTime // When this window expires
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-**Location**: `src/app/actions.ts`, `src/app/companions/`, `src/components/companion-form.tsx`
+  @@unique([identifier, action])
+  @@index([resetAt])
+}
+```
 
-#### CRUD Operations
+**Key Fields:**
+- `identifier`: Unique string combining IP/userId with action (e.g., "192.168.1.1:login" or "user-123:chat")
+- `action`: Type of rate-limited operation
+- `count`: Current attempts within this window
+- `resetAt`: Timestamp when count resets to 0
 
-**Create Companion** (`createCompanion`)
-- **Location**: src/app/actions.ts:8-40
-- **Validation**: companionSchema (Zod)
-- **Fields**: name, description, visualDescription, userAppearance, defaultOutfit, headerImage
-- **Behavior**: Sets currentOutfit = defaultOutfit, currentLocation = "living room", currentAction = "looking at viewer"
-- **Image Support**: Base64 header image via drag-drop/paste/file upload
-
-**Read Companions**
-- `getCompanions()`: Fetch all user's companions (src/app/actions.ts:43-53)
-- `getActiveCompanion()`: Fetch specific companion by ID
-
-**Update Companion** (`updateCompanion`)
-- **Location**: src/app/actions.ts:56-90
-- **Behavior**: Updates all fields, resets currentOutfit to defaultOutfit
-- **Validation**: companionSchema (Zod)
-
-**Delete Companion** (`deleteCompanion`)
-- **Location**: src/app/actions.ts:93-109
-- **Behavior**: Cascade deletes all messages
-- **Confirmation**: UI-level confirmation in delete-companion-button.tsx
-
-#### Features
-
-1. **Header Image**:
-   - Upload via file picker
-   - Drag-and-drop support
-   - Paste from clipboard
-   - Canvas-based cropping to 512x512 (image-cropper.tsx)
-   - Stored as base64 data URL
-
-2. **Form Validation**:
-   - Name: 1-100 characters
-   - Description: min 10 characters
-   - Visual Description: min 10 characters
-   - Default Outfit: min 1 character
-   - User Appearance: optional
-
-3. **Companion Cards**:
-   - Header image preview
-   - Name and description
-   - Quick actions: Chat, Edit, Delete buttons
-   - Location: src/app/companions/page.tsx
-
-**Code Locations**:
-- Form Component: src/components/companion-form.tsx
-- Server Actions: src/app/actions.ts
-- Companion List: src/app/companions/page.tsx
-- Create Page: src/app/companions/new/page.tsx
-- Edit Page: src/app/companions/[id]/edit/page.tsx
+**Indexes:**
+- Primary key: `id`
+- Unique: `[identifier, action]` for fast lookups
+- Single: `[resetAt]` for cleanup queries
 
 ---
 
-### 5.3 Image Generation
+### Database Optimization Notes
 
-**Location**: `src/app/image-actions.ts`, `src/app/generate/page.tsx`, `src/temporal/activities.ts`
-
-#### Standalone Generator
-
-**Location**: src/app/generate/page.tsx
-
-**Features**:
-- Full control over Stable Diffusion parameters
-- Prompt and negative prompt text areas
-- Dimension selector (512x512 to 1024x1024)
-- Steps slider (1-50, default 28)
-- CFG Scale slider (1-20, default 6.0)
-- Seed input (-1 for random)
-- Sampler dropdown (11 options: DPM++, Euler, DDIM, etc.)
-- Real-time preview with loading spinner
-- Download and copy to clipboard buttons
-
-**Server Action**: `generateStandaloneImage()` (src/app/image-actions.ts:7-54)
-
-#### Contextual Generation (In-Chat)
-
-**Trigger**: User checks "Generate Image" in ChatForm
-
-**Process**:
-1. User message triggers Temporal workflow with `shouldGenerateImage: true`
-2. Context analysis extracts visual tags, expression, lighting
-3. Automatic prompt construction from companion state
-4. Smart outfit layering (removes hidden underwear)
-5. Location enhancements applied
-6. Image generated via Stable Diffusion
-7. Returned as base64 and stored with message
-
-**Prompt Construction**:
-```
-[Quality Tags] + [LoRA Weight] + [Character Tags] + [Composition Tags] +
-[Visual Tags] + [Expression] + [Location] + [Enhancements] +
-[Lighting] + [User Appearance Tags (if present)] + [Outfit] + [Visual Description]
-```
-
-**Example**:
-```
-(masterpiece, best quality:1.2), absurdres, highres, cinematic light,
-uncensored, <lora:[inukai mofu]:0.4>, 1girl, solo, looking at viewer,
-standing, bedroom, soft lighting, warm tones, intimate, cozy,
-red hair, green eyes, wearing black jeans and white t-shirt
-```
-
-**Code Locations**:
-- Standalone: src/app/image-actions.ts:7-54
-- Contextual: src/temporal/activities.ts:92-174
-- Prompt Building: src/temporal/activities.ts:114-142
-- Outfit Filtering: src/config/clothing-keywords.ts:96-149
-
-#### Smart Outfit Layering
-
-**Purpose**: Prevent illogical underwear visibility in images
-
-**Logic**:
-- Detects explicit content keywords (naked, nude, etc.)
-- Detects virtual contexts (selfie, video call)
-- Categorizes clothing: upper/lower outerwear, underwear, exposed tops, full coverage
-- Hides underwear when covered by outer layers
-- Preserves underwear in explicit or virtual contexts
-
-**Code Location**: src/config/clothing-keywords.ts
-
-#### Scene Enhancements
-
-**Purpose**: Add environmental context to image prompts
-
-**Enhancements**:
-- **Locations**: bedroom, living room, kitchen, bathroom, gym, office, park, beach, street, car, shower, pool, hot tub
-- **Actions**: selfie, portrait, sitting, lying, stretching, bending, etc.
-
-**Example** (bedroom):
-```
-soft lighting, warm tones, intimate, cozy, bed, pillows, sheets
-```
-
-**Code Location**: src/config/scene-enhancements.ts
+1. **Composite Indexes**: Optimized for common query patterns (e.g., fetching user's companions sorted by creation date)
+2. **Cascade Deletes**: Deleting a user automatically removes companions, messages, workflow executions
+3. **Image Storage**: URLs stored (not base64) to avoid bloating database (5MB image → 7MB+ base64)
+4. **Text Fields**: `@db.Text` used for long content (messages, errors) to avoid VARCHAR limits
 
 ---
 
-### 5.4 Gallery System
+## Authentication System
 
-**Location**: `src/app/gallery/`, `src/components/image-gallery-grid.tsx`
+### Overview
+Authentication is handled by **NextAuth v5** with a custom credentials provider. The system supports username/email login with rate limiting and secure password hashing.
 
-#### Gallery Overview
+### Registration Flow
 
-**Location**: src/app/gallery/page.tsx
+**File**: `src/app/auth-actions.ts`
 
-**Features**:
-- Lists all companions with image counts
-- Aggregated query to count messages with images
-- Click companion card to view gallery
-
-**Query Optimization**:
 ```typescript
-const companionsWithCounts = await prisma.companion.findMany({
-    where: { userId: user.id },
-    include: {
-        _count: {
-            select: {
-                messages: { where: { imageUrl: { not: null } } }
-            }
-        }
+export async function register(data: {
+  name: string
+  email: string
+  username: string
+  password: string
+}) {
+  // 1. Rate limit check (3 registrations per 24 hours per IP)
+  const ip = await getClientIp()
+  await checkRateLimit(`${ip}:register`, 'register', 3, 24 * 60)
+
+  // 2. Validate input (Zod schema)
+  const validated = registrationSchema.parse(data)
+
+  // 3. Check uniqueness (email, username)
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: validated.email.toLowerCase() },
+        { username: validated.username.toLowerCase() }
+      ]
     }
-});
-```
-
-#### Individual Gallery
-
-**Location**: src/app/gallery/[id]/page.tsx
-
-**Features**:
-- Grid layout of all generated images for companion
-- Hover to reveal download button
-- Date/time display for each image
-- Message context preview
-- Ordered by most recent first
-
-**Query**:
-```typescript
-const messagesWithImages = await prisma.message.findMany({
-    where: { companionId: companion.id, imageUrl: { not: null } },
-    orderBy: { createdAt: "desc" }
-});
-```
-
-**Code Locations**:
-- Gallery Overview: src/app/gallery/page.tsx
-- Individual Gallery: src/app/gallery/[id]/page.tsx
-- Grid Component: src/components/image-gallery-grid.tsx
-
----
-
-### 5.5 Settings & Memory Management
-
-**Location**: `src/app/settings/page.tsx`, `src/components/settingsList.tsx`
-
-#### Features
-
-1. **RAG (Memory) Toggle**: UI-only, not implemented
-2. **DeepThink Logic Toggle**: UI-only, not implemented
-3. **Danger Zone - Wipe Companion Memory**:
-   - Deletes all messages for companion
-   - Resets currentOutfit to defaultOutfit
-   - Resets currentLocation to "living room"
-   - Resets currentAction to "looking at viewer"
-   - Confirmation dialog before deletion
-
-**Server Action**: `wipeCompanionMemory()` (src/app/actions.ts:112-133)
-
-**Code Locations**:
-- Settings Page: src/app/settings/page.tsx
-- Settings List Component: src/components/settingsList.tsx
-- Wipe Action: src/app/actions.ts:112-133
-
----
-
-## 6. Architecture & Data Flow
-
-### 6.1 Request Flow: Chat Message with Image
-
-```
-1. User Types Message in ChatForm.tsx
-   ↓
-2. Form Submission (sendMessage server action)
-   ├─ Input: message (string), companionId (UUID), generateImage (boolean)
-   ↓
-3. Zod Validation (messageSchema)
-   ├─ message: 1-2000 chars
-   ├─ companionId: valid UUID
-   └─ generateImage: optional boolean
-   ↓
-4. Auth Check (getAuthenticatedUser)
-   ├─ Retrieves session via NextAuth
-   └─ Throws if not authenticated
-   ↓
-5. Ownership Verification (verifyCompanionOwnership)
-   ├─ Fetches companion from database
-   ├─ Verifies user owns companion
-   └─ Throws if not owner
-   ↓
-6. Save User Message to DB
-   ├─ prisma.message.create()
-   ├─ role: "user"
-   └─ content: message text
-   ↓
-7. Fetch Message History (30 recent)
-   ├─ prisma.message.findMany()
-   ├─ where: { companionId }
-   ├─ orderBy: { createdAt: "desc" }
-   └─ take: 30
-   ↓
-8. Fetch Companion Data
-   ├─ prisma.companion.findUnique()
-   └─ Includes: name, description, visualDescription, state fields
-   ↓
-9. Start Temporal Workflow (ChatWorkflow)
-   ├─ Task Queue: 'companion-chat-queue'
-   ├─ Workflow ID: `chat-${companionId}-${nanoid()}`
-   ├─ Input:
-   │   ├─ companionId
-   │   ├─ companionName
-   │   ├─ userMessage
-   │   ├─ userName
-   │   ├─ currentOutfit
-   │   ├─ currentLocation
-   │   ├─ currentAction
-   │   ├─ msgHistory (30 messages)
-   │   └─ shouldGenerateImage
-   ↓
-10. Workflow Executes:
-    ├─ STEP 1: analyzeContext(userMessage) - Initial context analysis
-    │   └─ Returns: outfit, location, action, visualTags, expression, lighting
-    │
-    ├─ STEP 2: generateLLMResponse() - Generate companion reply
-    │   └─ Returns: text response (1-3 sentences)
-    │
-    ├─ STEP 3: analyzeContext(userMessage + response) - Re-analyze with response
-    │   └─ Detects state changes from companion's described actions
-    │
-    ├─ STEP 4: updateCompanionContext() (conditional)
-    │   └─ Only if state changed from initial analysis
-    │
-    ├─ STEP 5: generateCompanionImage() (conditional)
-    │   └─ Only if shouldGenerateImage = true
-    │
-    └─ Return: { text, imageUrl, updatedState }
-    ↓
-11. Save Assistant Message with Image URL
-    ├─ prisma.message.create()
-    ├─ role: "assistant"
-    ├─ content: workflow.text
-    └─ imageUrl: workflow.imageUrl (if generated)
-    ↓
-12. Revalidate Path and Return Success
-    ├─ revalidatePath("/")
-    └─ return { success: true }
-    ↓
-13. UI Updates with New Messages
-    └─ Page re-renders with new messages and images
-```
-
-**Code Location**: src/app/chat-actions.ts:17-118
-
----
-
-### 6.2 Temporal Workflow Architecture
-
-**Location**: `src/temporal/workflows.ts` & `src/temporal/activities.ts`
-
-#### ChatWorkflow Process
-
-**Workflow Definition**: src/temporal/workflows.ts:29-105
-
-**Steps**:
-
-1. **Analyze Initial Context**
-   - **Activity**: `analyzeContext()`
-   - **Input**: User message
-   - **Output**: outfit, location, action, visualTags, expression, lighting, isUserPresent
-   - **Purpose**: Extract context from user's message
-
-2. **Generate LLM Response**
-   - **Activity**: `generateLLMResponse()`
-   - **Input**: companionId, companionName, userMessage, userName, context, history
-   - **Output**: AI response text (1-3 sentences)
-   - **Purpose**: Generate companion's reply
-
-3. **Analyze Final Context**
-   - **Activity**: `analyzeContext()`
-   - **Input**: User message + companion response
-   - **Output**: Updated context (may include state changes)
-   - **Purpose**: Re-analyze including companion's described actions
-
-4. **Update Context (Conditional)**
-   - **Activity**: `updateCompanionContext()`
-   - **Condition**: Only if state changed from initial analysis
-   - **Input**: companionId, newOutfit, newLocation, newAction
-   - **Output**: Updated companion record
-   - **Purpose**: Persist state changes to database
-
-5. **Generate Image (Conditional)**
-   - **Activity**: `generateCompanionImage()`
-   - **Condition**: Only if shouldGenerateImage = true
-   - **Input**: companion data, context, user appearance
-   - **Output**: Base64-encoded PNG image
-   - **Purpose**: Generate contextual image of companion
-
-#### Activities (4 Total)
-
-**1. analyzeContext()**
-- **Location**: src/temporal/activities.ts:229-303
-- **Purpose**: LLM-based context extraction
-- **Input**: Message text
-- **Output**: JSON with outfit, location, action, visual_tags, expression, lighting, is_user_present
-- **LLM Config**: Temperature 0.2 (deterministic), max tokens 600
-- **Fallback**: Returns previous state if JSON parsing fails
-
-**2. generateLLMResponse()**
-- **Location**: src/temporal/activities.ts:306-384
-- **Purpose**: Generate character response
-- **Input**: companion data, user message, context, history
-- **Output**: Text response (1-3 sentences)
-- **LLM Config**: Temperature 0.85 (creative), max tokens 150
-- **System Prompt**: Includes companion personality, current context, visual description
-
-**3. generateCompanionImage()**
-- **Location**: src/temporal/activities.ts:92-174
-- **Purpose**: Generate image via Stable Diffusion
-- **Input**: companion data, context analysis
-- **Output**: Base64-encoded PNG
-- **Process**:
-  1. Build prompt from context
-  2. Apply outfit filtering (hide hidden underwear)
-  3. Apply scene enhancements
-  4. Send to Stable Diffusion API
-  5. Return base64 image
-
-**4. updateCompanionContext()**
-- **Location**: src/temporal/activities.ts:177-192
-- **Purpose**: Update companion state in database
-- **Input**: companionId, newOutfit, newLocation, newAction
-- **Output**: Updated companion record
-- **Database**: prisma.companion.update()
-
-#### Worker Configuration
-
-**Location**: src/temporal/worker.ts
-
-**Configuration**:
-```typescript
-Task Queue: 'companion-chat-queue'
-Workflows Path: 'src/temporal/workflows.ts'
-Activities: All from 'src/temporal/activities.ts'
-Connection: localhost:7233 (default Temporal server)
-```
-
-**Start Worker**:
-```bash
-npm run worker
-```
-
----
-
-### 6.3 Component Hierarchy
-
-```
-app/layout.tsx (Root)
-├─ Providers (NextAuth SessionProvider)
-└─ Body
-    ├─ Sidebar (Navigation)
-    │   ├─ MessageSquare → Chat (/)
-    │   ├─ Users → Companions (/companions)
-    │   ├─ Image → Gallery (/gallery)
-    │   ├─ Sparkles → Generate (/generate)
-    │   ├─ Settings → Settings (/settings)
-    │   └─ LogOut → Sign Out
-    │
-    └─ Main Content
-        ├─ app/page.tsx (Chat)
-        │   ├─ Companion Status Bar
-        │   ├─ Message List
-        │   │   ├─ User Messages (right-aligned)
-        │   │   └─ AI Messages (left-aligned, with images)
-        │   └─ ChatForm
-        │       ├─ Textarea Input
-        │       ├─ Image Checkbox
-        │       └─ Send Button
-        │
-        ├─ app/companions/page.tsx (Companion List)
-        │   └─ Companion Cards
-        │       ├─ Header Image
-        │       ├─ Name/Description
-        │       └─ Action Buttons (Chat, Edit, Delete)
-        │
-        ├─ app/companions/new/page.tsx (Create)
-        │   └─ CompanionForm
-        │       ├─ Name Input
-        │       ├─ Description Textarea
-        │       ├─ Visual Description Textarea
-        │       ├─ User Appearance Textarea
-        │       ├─ Default Outfit Input
-        │       ├─ Header Image Upload
-        │       │   ├─ ImageCropper (modal)
-        │       │   └─ Preview
-        │       └─ Submit Button
-        │
-        ├─ app/gallery/page.tsx (Gallery Overview)
-        │   └─ Companion Cards with Image Counts
-        │
-        ├─ app/gallery/[id]/page.tsx (Individual Gallery)
-        │   └─ ImageGalleryGrid
-        │       └─ Image Cards (with download, date, context)
-        │
-        ├─ app/generate/page.tsx (Standalone Generator)
-        │   ├─ Prompt Textarea
-        │   ├─ Negative Prompt Textarea
-        │   ├─ Parameter Controls
-        │   ├─ Generate Button
-        │   └─ Image Preview (with download/copy)
-        │
-        └─ app/settings/page.tsx (Settings)
-            └─ SettingsList
-                ├─ Companion Selector
-                ├─ RAG Toggle (UI-only)
-                ├─ DeepThink Toggle (UI-only)
-                └─ Wipe Memory Button (Danger Zone)
-```
-
----
-
-## 7. External Integrations
-
-### 7.1 Novita AI API
-
-**Purpose**: Large Language Model (LLM) for chat and context analysis
-
-**Endpoint**: `https://api.novita.ai/v3/openai/chat/completions`
-
-**Model**: `sao10k/l31-70b-euryale-v2.2` (70B parameter LLM)
-
-**Authentication**: Bearer token via `NOVITA_KEY` environment variable
-
-#### Use Case 1: Chat/Response Generation
-
-**Function**: `generateLLMResponse()` (src/temporal/activities.ts:306-384)
-
-**Configuration**:
-```typescript
-{
-  model: "sao10k/l31-70b-euryale-v2.2",
-  messages: [
-    { role: "system", content: "<personality + context>" },
-    { role: "user", content: "<message history>" },
-    { role: "user", content: "<current message>" }
-  ],
-  temperature: 0.85,      // Creative but focused
-  max_tokens: 150,        // Enforces 1-3 sentence responses
-  top_p: 0.95,
-  repetition_penalty: 1.1
-}
-```
-
-**Response**:
-```typescript
-{
-  choices: [{
-    message: {
-      content: "AI response text"
-    }
-  }]
-}
-```
-
-#### Use Case 2: Context Analysis
-
-**Function**: `analyzeContext()` (src/temporal/activities.ts:229-303)
-
-**Configuration**:
-```typescript
-{
-  model: "sao10k/l31-70b-euryale-v2.2",
-  messages: [
-    { role: "system", content: "<analysis prompt>" },
-    { role: "user", content: "<conversation text>" }
-  ],
-  temperature: 0.2,       // Deterministic analysis
-  max_tokens: 600
-}
-```
-
-**Expected Response** (JSON):
-```json
-{
-  "outfit": "black jeans and white t-shirt",
-  "location": "bedroom",
-  "action_summary": "lying on bed, looking at phone",
-  "is_user_present": true,
-  "visual_tags": ["lying", "relaxed", "phone"],
-  "expression": "neutral",
-  "lighting": "soft lighting"
-}
-```
-
-**Fallback**: If JSON parsing fails, returns previous state
-
----
-
-### 7.2 Stable Diffusion Forge API
-
-**Purpose**: Text-to-image generation
-
-**Endpoint**: `${SD_API_URL}/sdapi/v1/txt2img`
-
-**Authentication**: None (direct HTTP POST)
-
-**Configuration**: `IMAGE_GENERATION_DEFAULTS` (src/config/generation.ts:7-33)
-
-#### Parameters
-
-```typescript
-{
-  prompt: string,              // Positive prompt
-  negative_prompt: string,     // Negative prompt
-  width: 832,                  // Default width
-  height: 1216,                // Default height (portrait)
-  steps: 28,                   // Sampling steps
-  cfg_scale: 6.0,              // Classifier-free guidance scale
-  seed: -1,                    // Random seed (-1 = random)
-  sampler_name: "DPM++ 2M",    // Sampling method
-  scheduler: "karras"          // Noise scheduler
-}
-```
-
-#### Available Samplers
-
-```typescript
-[
-  "DPM++ 2M",          // Default - fast, high quality
-  "DPM++ 2M Karras",   // With Karras noise schedule
-  "DPM++ SDE",
-  "DPM++ SDE Karras",
-  "Euler",             // Simple, fast
-  "Euler a",           // Ancestral sampling
-  "Heun",
-  "DDIM",              // Denoising diffusion
-  "PLMS",
-  "UniPC",
-  "LCM"                // Latent consistency model
-]
-```
-
-#### Response
-
-```typescript
-{
-  images: [
-    "base64_encoded_png_data"  // Single image
-  ]
-}
-```
-
-**Processing**: Base64 data converted to data URL (`data:image/png;base64,<data>`)
-
-**Code Locations**:
-- Standalone: src/app/image-actions.ts:7-54
-- Contextual: src/temporal/activities.ts:92-174
-- Config: src/config/generation.ts
-
----
-
-### 7.3 Temporal.io Server
-
-**Purpose**: Workflow orchestration and durable execution
-
-**Connection**: `localhost:7233` (gRPC endpoint)
-
-**UI**: `http://localhost:8233` (Web UI)
-
-**Services**:
-- Workflow execution
-- Activity scheduling
-- State persistence
-- Failure handling with automatic retries
-- Timeout management
-
-#### Configuration
-
-**Worker** (src/temporal/worker.ts):
-```typescript
-{
-  connection: await NativeConnection.connect({ address: "localhost:7233" }),
-  namespace: "default",
-  taskQueue: "companion-chat-queue",
-  workflowsPath: path.resolve(__dirname, "./workflows"),
-  activities: {
-    analyzeContext,
-    generateLLMResponse,
-    generateCompanionImage,
-    updateCompanionContext
-  }
-}
-```
-
-**Client** (src/app/chat-actions.ts:28-32):
-```typescript
-const client = new Client({ connection: await Connection.connect() });
-```
-
-#### Workflow Timeouts
-
-**Execution Timeout**: 2 minutes (src/temporal/workflows.ts:93)
-```typescript
-await startToCloseTimeout('2 minutes', () =>
-  proxyActivities<typeof activities>({ ... })
-);
-```
-
-#### Docker Compose Setup
-
-```yaml
-temporal:
-  image: temporalio/admin-tools:latest
-  ports:
-    - "7233:7233"  # gRPC
-    - "8233:8233"  # Web UI
-  command: temporal server start-dev
-```
-
-**Start Services**:
-```bash
-docker-compose up -d
-```
-
----
-
-## 8. Configuration System
-
-### 8.1 Image Generation Configuration
-
-**Location**: `src/config/generation.ts`
-
-#### Default Parameters
-
-```typescript
-export const IMAGE_GENERATION_DEFAULTS = {
-  dimensions: { width: 832, height: 1216 },  // Portrait aspect
-  steps: 28,                                  // Sampling steps
-  sampler: "DPM++ 2M" as const,              // Sampling method
-  scheduler: "karras" as const,              // Noise scheduler
-  cfgScale: 6,                               // Guidance scale
-  seed: -1,                                  // Random seed
-
-  lora: {
-    name: "[inukai mofu] Artist Style Illustrious_2376885",
-    weight: 0.4
-  },
-
-  qualityTags: {
-    positive: "(masterpiece, best quality:1.2), absurdres, highres, cinematic light, uncensored",
-    negative: "(bad quality:1.15), (worst quality:1.3), neghands, monochrome, 3d, long neck, ..."
-  }
-};
-```
-
-#### Default Companion State
-
-```typescript
-export const DEFAULT_COMPANION_STATE = {
-  outfit: "casual clothes",
-  location: "living room",
-  action: "looking at viewer",
-  lighting: "cinematic lighting",
-  expression: "neutral"
-};
-```
-
-#### LLM Configuration
-
-```typescript
-export const LLM_CHAT_CONFIG = {
-  temperature: 0.85,      // Creative chat responses
-  max_tokens: 150,        // 1-3 sentence limit
-  top_p: 0.95,
-  repetition_penalty: 1.1
-};
-
-export const LLM_MODEL = "sao10k/l31-70b-euryale-v2.2" as const;
-
-export const CONTEXT_ANALYSIS_CONFIG = {
-  temperature: 0.2,       // Deterministic analysis
-  max_tokens: 600,
-  historyLimit: 8         // Use last 8 messages for context
-};
-```
-
----
-
-### 8.2 Clothing Keywords
-
-**Location**: `src/config/clothing-keywords.ts`
-
-**Purpose**: Smart outfit layering logic for realistic image generation
-
-#### Keyword Categories
-
-**1. Explicit Content** (always show underwear):
-```typescript
-["naked", "nude", "topless", "bottomless", "spreading", ...]
-```
-
-**2. Virtual Context** (always show underwear):
-```typescript
-["selfie", "video call", "webcam", "phone camera", "mirror pic", ...]
-```
-
-**3. Clothing Categories**:
-
-```typescript
-// Upper Outerwear (hides upper underwear)
-["hoodie", "jacket", "sweater", "coat", "blazer", ...]
-
-// Lower Outerwear (hides lower underwear)
-["pants", "jeans", "skirt", "shorts", "leggings", ...]
-
-// Upper Underwear (hidden by upper outerwear)
-["bra", "sports bra", "bikini top", ...]
-
-// Lower Underwear (hidden by lower outerwear)
-["thong", "panties", "underwear", "bikini bottom", ...]
-
-// Exposed Tops (may show upper underwear)
-["tank top", "crop top", "camisole", ...]
-
-// Full Coverage (hides all underwear)
-["dress", "jumpsuit", "romper", "bodysuit", ...]
-```
-
-#### Smart Filtering Function
-
-```typescript
-export function filterOutfitForImageGeneration(
-  outfit: string
-): string
-```
-
-**Logic**:
-1. Check for explicit content → preserve all
-2. Check for virtual context → preserve all
-3. Check for full coverage → remove all underwear
-4. Check for upper outerwear → remove upper underwear
-5. Check for lower outerwear → remove lower underwear
-6. Return filtered outfit string
-
-**Example**:
-```
-Input:  "black jeans, white t-shirt, red bra"
-Output: "black jeans, white t-shirt"
-Reason: T-shirt and jeans hide bra
-```
-
----
-
-### 8.3 Scene Enhancements
-
-**Location**: `src/config/scene-enhancements.ts`
-
-**Purpose**: Add environmental context to image prompts
-
-#### Location Enhancements
-
-```typescript
-export const LOCATION_ENHANCEMENTS: Record<string, string> = {
-  bedroom: "soft lighting, warm tones, intimate, cozy, bed, pillows, sheets",
-  "living room": "natural light, ambient, comfortable, casual, couch, sofa",
-  kitchen: "bright, clean lighting, modern, clean, counter",
-  bathroom: "bright, fluorescent, clean, modern, mirror, tiles",
-  gym: "bright, high contrast, energetic, athletic, weights, equipment, mat",
-  office: "neutral lighting, professional, clean, desk, chair, computer",
-  park: "natural sunlight, outdoors, peaceful, nature, trees, grass, bench",
-  beach: "bright sunlight, golden hour, relaxed, tropical, sand, ocean, waves",
-  street: "natural daylight, urban, city, buildings, sidewalk",
-  car: "car interior lighting, confined, intimate, car seat, dashboard, interior",
-  shower: "wet, steam, water drops, intimate, wet, shower, water, steam, tiles",
-  pool: "bright, reflective water, wet, summery, pool, water, wet",
-  "hot tub": "dim, steam, mood lighting, intimate, relaxed, hot tub, water, steam"
-};
-```
-
-#### Action Enhancements
-
-```typescript
-export const ACTION_ENHANCEMENTS: Record<string, string> = {
-  selfie: "selfie, from above, phone visible, casual angle",
-  portrait: "portrait, facing camera, upper body",
-  sitting: "sitting, relaxed pose",
-  lying: "lying down, reclined",
-  stretching: "stretching, dynamic pose",
-  bending: "bending over, dynamic pose",
-  // ... more actions
-};
-```
-
-**Usage** (in generateCompanionImage):
-```typescript
-const locationEnhancement = LOCATION_ENHANCEMENTS[context.location.toLowerCase()] || "";
-const actionEnhancement = ACTION_ENHANCEMENTS[context.action.toLowerCase()] || "";
-
-const prompt = `${basePrompt}, ${locationEnhancement}, ${actionEnhancement}`;
-```
-
----
-
-## 9. Authentication & Authorization
-
-### 9.1 NextAuth Configuration
-
-**Location**: `src/lib/auth.ts`
-
-**Version**: NextAuth.js v5.0.0-beta.30
-
-#### Configuration
-
-```typescript
-export const authConfig = {
-  providers: [
-    Credentials({
-      name: "Credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        // 1. Find user by email or username (case-insensitive)
-        const user = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { email: credentials.email?.toLowerCase() },
-              { username: credentials.email?.toLowerCase() }
-            ]
-          }
-        });
-
-        // 2. Verify password with bcrypt
-        const isValid = await bcrypt.compare(
-          credentials.password,
-          user.hashedPassword
-        );
-
-        // 3. Return user if valid
-        if (isValid) return user;
-        return null;
-      }
-    })
-  ],
-
-  session: {
-    strategy: "jwt",       // JWT-based sessions
-    maxAge: 30 * 24 * 60 * 60  // 30 days
-  },
-
-  callbacks: {
-    async jwt({ token, user }) {
-      // Add user ID and username to JWT
-      if (user) {
-        token.id = user.id;
-        token.username = (user as any).username;
-      }
-      return token;
-    },
-
-    async session({ session, token }) {
-      // Add user ID and username to session
-      if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).username = token.username;
-      }
-      return session;
-    }
-  }
-};
-```
-
----
-
-### 9.2 Authentication Helpers
-
-**Location**: `src/lib/auth-helpers.ts`
-
-#### getAuthenticatedUser()
-
-**Purpose**: Retrieve current user from session
-
-```typescript
-export async function getAuthenticatedUser() {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized");
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id }
-  });
-
-  if (!user) throw new Error("User not found");
-
-  return user;
-}
-```
-
-**Usage**:
-```typescript
-const user = await getAuthenticatedUser();
-// Throws if not logged in
-```
-
-#### verifyCompanionOwnership()
-
-**Purpose**: Fetch companion and verify ownership
-
-```typescript
-export async function verifyCompanionOwnership(
-  companionId: string,
-  userId: string
-) {
-  const companion = await prisma.companion.findUnique({
-    where: { id: companionId }
-  });
-
-  if (!companion) {
-    throw new Error("Companion not found");
-  }
-
-  if (companion.userId !== userId) {
-    throw new Error("Unauthorized");
-  }
-
-  return companion;
-}
-```
-
-**Usage**:
-```typescript
-const user = await getAuthenticatedUser();
-const companion = await verifyCompanionOwnership(companionId, user.id);
-// Throws if user doesn't own companion
-```
-
----
-
-### 9.3 User Registration
-
-**Location**: `src/app/auth-actions.ts`
-
-#### registerUser Server Action
-
-```typescript
-export async function registerUser(formData: FormData) {
-  // 1. Validate input with Zod
-  const validated = registrationSchema.parse({
-    name: formData.get("name"),
-    email: formData.get("email"),
-    username: formData.get("username"),
-    password: formData.get("password")
-  });
-
-  // 2. Check for existing email
-  const existingEmail = await prisma.user.findUnique({
-    where: { email: validated.email.toLowerCase() }
-  });
-  if (existingEmail) {
-    return { success: false, error: "Email already in use" };
-  }
-
-  // 3. Check for existing username
-  const existingUsername = await prisma.user.findUnique({
-    where: { username: validated.username.toLowerCase() }
-  });
-  if (existingUsername) {
-    return { success: false, error: "Username already taken" };
-  }
+  })
+  if (existing) throw new Error('User already exists')
 
   // 4. Hash password (bcrypt, 10 rounds)
-  const hashedPassword = await bcrypt.hash(validated.password, 10);
+  const hashedPassword = await hashPassword(validated.password)
 
   // 5. Create user
   await prisma.user.create({
@@ -1383,1449 +375,1682 @@ export async function registerUser(formData: FormData) {
       username: validated.username.toLowerCase(),
       hashedPassword
     }
-  });
+  })
 
-  return { success: true };
+  // 6. Redirect to login
+  redirect('/login')
 }
 ```
 
-**Validation Schema** (src/lib/validation.ts:27-35):
-```typescript
-export const registrationSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email address"),
-  username: z.string()
-    .min(3, "Username must be at least 3 characters")
-    .max(20, "Username must be at most 20 characters")
-    .regex(/^[a-z0-9_]+$/, "Username can only contain lowercase letters, numbers, and underscores"),
-  password: z.string()
-    .min(8, "Password must be at least 8 characters")
-});
-```
+**Validation Rules**:
+- `name`: 1-50 characters
+- `email`: Valid email format, unique
+- `username`: 3-20 characters, alphanumeric + underscore, unique
+- `password`: Minimum 8 characters
+
+**Rate Limiting**: 3 registrations per 24 hours per IP address
 
 ---
 
-### 9.4 Login/Logout Flow
+### Login Flow
 
-#### Login
-
-**Location**: src/app/login/page.tsx
-
-**Process**:
-1. User submits credentials form
-2. Form POSTs to `/api/auth/callback/credentials`
-3. NextAuth calls `authorize()` function
-4. User lookup by email/username (case-insensitive)
-5. Password verified with bcrypt
-6. JWT session created on success
-7. Redirect to home page
-
-#### Logout
-
-**Component**: Sidebar (src/components/sidebar.tsx:56-63)
-
-**Process**:
-```typescript
-<button
-  onClick={async () => {
-    await signOut({ redirectTo: "/login" });
-  }}
->
-  <LogOut className="w-5 h-5" />
-  <span>Sign Out</span>
-</button>
-```
-
----
-
-## 10. Temporal Workflows
-
-### 10.1 ChatWorkflow
-
-**Location**: `src/temporal/workflows.ts:29-105`
-
-**Purpose**: Orchestrate multi-step AI conversation processing
-
-#### Input Arguments
+**File**: `src/lib/auth.ts`
 
 ```typescript
-interface ChatWorkflowArgs {
-  companionId: string;
-  companionName: string;
-  userMessage: string;
-  userName: string;
-  currentOutfit: string;
-  currentLocation: string;
-  currentAction: string;
-  msgHistory: MessageHistory[];
-  shouldGenerateImage: boolean;
-}
-```
-
-#### Execution Steps
-
-**STEP 1: Analyze Initial Context**
-```typescript
-const initialContext = await activities.analyzeContext(
-  userMessage
-);
-```
-
-**STEP 2: Generate LLM Response**
-```typescript
-const llmResponse = await activities.generateLLMResponse(
-  companionId,
-  companionName,
-  userMessage,
-  userName,
-  currentOutfit,
-  currentLocation,
-  currentAction,
-  msgHistory
-);
-```
-
-**STEP 3: Analyze Final Context**
-```typescript
-const finalContext = await activities.analyzeContext(
-  `${userMessage}\n\n${llmResponse}`
-);
-```
-
-**STEP 4: Update Context (Conditional)**
-```typescript
-if (
-  finalContext.outfit !== currentOutfit ||
-  finalContext.location !== currentLocation ||
-  finalContext.action_summary !== currentAction
-) {
-  await activities.updateCompanionContext(
-    companionId,
-    finalContext.outfit,
-    finalContext.location,
-    finalContext.action_summary
-  );
-}
-```
-
-**STEP 5: Generate Image (Conditional)**
-```typescript
-let imageUrl: string | null = null;
-
-if (shouldGenerateImage) {
-  imageUrl = await activities.generateCompanionImage(
-    companionId,
-    visualDescription,
-    userAppearance,
-    finalContext
-  );
-}
-```
-
-#### Return Value
-
-```typescript
-interface WorkflowResult {
-  text: string;           // AI response text
-  imageUrl: string | null;  // Generated image (if requested)
-  updatedState: {
-    outfit: string;
-    location: string;
-    action: string;
-  };
-}
-```
-
----
-
-### 10.2 Activity Reference
-
-#### analyzeContext()
-
-**Location**: src/temporal/activities.ts:229-303
-
-**Signature**:
-```typescript
-export async function analyzeContext(
-  messageText: string
-): Promise<LLMAnalysisResponse>
-```
-
-**Input**: Conversation text (user message or user message + AI response)
-
-**Output**:
-```typescript
-interface LLMAnalysisResponse {
-  outfit: string;
-  location: string;
-  action_summary: string;
-  visual_tags: string[];
-  is_user_present: boolean;
-  expression: string;
-  lighting: string;
-}
-```
-
-**Process**:
-1. Call Novita AI API with analysis prompt
-2. Extract JSON from LLM response
-3. Parse and validate JSON structure
-4. Return structured context data
-5. On failure: return default state with previous values
-
-**LLM Prompt** (abbreviated):
-```
-Analyze this conversation and extract:
-1. Outfit description
-2. Location
-3. Action summary
-4. Visual tags
-5. User presence (true/false)
-6. Expression
-7. Lighting
-
-Respond ONLY with JSON:
-{ "outfit": "...", "location": "...", ... }
-```
-
----
-
-#### generateLLMResponse()
-
-**Location**: src/temporal/activities.ts:306-384
-
-**Signature**:
-```typescript
-export async function generateLLMResponse(
-  companionId: string,
-  companionName: string,
-  userMessage: string,
-  userName: string,
-  currentOutfit: string,
-  currentLocation: string,
-  currentAction: string,
-  msgHistory: MessageHistory[]
-): Promise<string>
-```
-
-**Input**: Companion data, user message, context, history
-
-**Output**: Text response (1-3 sentences)
-
-**Process**:
-1. Fetch companion from database
-2. Build system prompt with personality + context
-3. Format message history
-4. Call Novita AI API
-5. Return AI response text
-
-**System Prompt Structure**:
-```
-You are [COMPANION_NAME].
-[PERSONALITY_DESCRIPTION]
-
-CURRENT CONTEXT:
-- Location: [LOCATION]
-- Action: [ACTION]
-- Outfit: [OUTFIT]
-[USER_APPEARANCE_NOTE]
-
-VISUAL APPEARANCE:
-[VISUAL_DESCRIPTION]
-
-IMPORTANT:
-- Keep responses to 1-3 sentences
-- Stay in character
-- Consider current context
-- Be specific about actions/outfit changes
-```
-
----
-
-#### generateCompanionImage()
-
-**Location**: src/temporal/activities.ts:92-174
-
-**Signature**:
-```typescript
-export async function generateCompanionImage(
-  companionId: string,
-  visualDescription: string,
-  userAppearance: string | null,
-  context: LLMAnalysisResponse
-): Promise<string>
-```
-
-**Input**: Companion visual description, user appearance (optional), context
-
-**Output**: Base64 data URL (`data:image/png;base64,...`)
-
-**Process**:
-1. Build base prompt with quality tags + LoRA
-2. Determine character tags (1girl/solo or 1girl, 1boy)
-3. Add composition tags
-4. Add visual tags from context
-5. Add expression and location
-6. Apply location enhancements
-7. Apply action enhancements
-8. Add lighting
-9. Add user appearance tags (if present)
-10. Filter outfit (remove hidden underwear)
-11. Add filtered outfit + visual description
-12. Call Stable Diffusion API
-13. Return base64 image
-
-**Prompt Construction Example**:
-```
-(masterpiece, best quality:1.2), absurdres, highres, cinematic light, uncensored,
-<lora:[inukai mofu]:0.4>,
-1girl, solo,
-looking at viewer,
-standing,
-smiling,
-bedroom, soft lighting, warm tones, intimate, cozy, bed, pillows, sheets,
-cinematic lighting,
-red hair, green eyes,
-black jeans, white t-shirt
-```
-
----
-
-#### updateCompanionContext()
-
-**Location**: src/temporal/activities.ts:177-192
-
-**Signature**:
-```typescript
-export async function updateCompanionContext(
-  companionId: string,
-  newOutfit: string,
-  newLocation: string,
-  newAction: string
-): Promise<void>
-```
-
-**Input**: Companion ID, new state values
-
-**Output**: None (void)
-
-**Process**:
-```typescript
-await prisma.companion.update({
-  where: { id: companionId },
-  data: {
-    currentOutfit: newOutfit,
-    currentLocation: newLocation,
-    currentAction: newAction
-  }
-});
-```
-
----
-
-### 10.3 Worker Setup
-
-**Location**: `src/temporal/worker.ts`
-
-**Purpose**: Run Temporal worker process to execute workflows and activities
-
-**Code**:
-```typescript
-import { NativeConnection, Worker } from "@temporalio/worker";
-import * as activities from "./activities";
-import path from "path";
-
-async function run() {
-  const connection = await NativeConnection.connect({
-    address: "localhost:7233"
-  });
-
-  const worker = await Worker.create({
-    connection,
-    namespace: "default",
-    taskQueue: "companion-chat-queue",
-    workflowsPath: path.resolve(__dirname, "./workflows"),
-    activities
-  });
-
-  console.log("Temporal worker started on task queue: companion-chat-queue");
-  await worker.run();
-}
-
-run().catch((err) => {
-  console.error("Worker error:", err);
-  process.exit(1);
-});
-```
-
-**Start Worker**:
-```bash
-npm run worker
-```
-
-**Logs**: Worker logs workflow executions and activity calls to console
-
----
-
-## 11. Type System
-
-### 11.1 Core Types
-
-**Location**: `src/types/prisma.ts`
-
-#### User Type
-
-```typescript
-export interface User {
-  id: string;
-  email: string;
-  username: string;
-  name: string;
-  hashedPassword: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
-
-#### Companion Type
-
-```typescript
-export interface Companion {
-  id: string;
-  name: string;
-  description: string;
-  visualDescription: string;
-  userAppearance: string | null;
-  defaultOutfit: string;
-  currentOutfit: string;
-  currentLocation: string;
-  currentAction: string;
-  avatarUrl: string | null;
-  headerImage: string | null;
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
-
-#### Message Type
-
-```typescript
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  imageUrl: string | null;
-  companionId: string;
-  createdAt: Date;
-}
-```
-
----
-
-### 11.2 Workflow Types
-
-**Location**: `src/temporal/workflows.ts`, `src/temporal/activities.ts`
-
-#### ChatWorkflowArgs
-
-```typescript
-export interface ChatWorkflowArgs {
-  companionId: string;
-  companionName: string;
-  userMessage: string;
-  userName: string;
-  currentOutfit: string;
-  currentLocation: string;
-  currentAction: string;
-  msgHistory: MessageHistory[];
-  shouldGenerateImage: boolean;
-}
-```
-
-#### MessageHistory
-
-```typescript
-export interface MessageHistory {
-  role: "user" | "assistant";
-  content: string;
-}
-```
-
-#### LLMAnalysisResponse
-
-```typescript
-interface LLMAnalysisResponse {
-  outfit: string;
-  location: string;
-  action_summary: string;
-  visual_tags: string[];
-  is_user_present: boolean;
-  expression: string;
-  lighting: string;
-}
-```
-
----
-
-### 11.3 API Response Types
-
-**Location**: `src/temporal/activities.ts`
-
-#### NovitaChatResponse
-
-```typescript
-interface NovitaChatResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
-}
-```
-
-#### SDGenerationParams
-
-```typescript
-export interface SDGenerationParams {
-  prompt: string;
-  negative_prompt: string;
-  width: number;
-  height: number;
-  steps: number;
-  cfg_scale: number;
-  seed: number;
-  sampler_name: string;
-}
-```
-
----
-
-### 11.4 Server Action Result Types
-
-**Location**: `src/app/actions.ts`, `src/app/chat-actions.ts`
-
-#### ActionResult
-
-```typescript
-export type ActionResult<T = void> = {
-  success: boolean;
-  error?: string;
-  data?: T;
-};
-```
-
-**Usage**:
-```typescript
-// No data
-return { success: true };
-return { success: false, error: "Error message" };
-
-// With data
-return { success: true, data: { id: "123" } };
-```
-
----
-
-### 11.5 NextAuth Type Extensions
-
-**Location**: `src/types/next-auth.d.ts`
-
-```typescript
-declare module "next-auth" {
-  interface User {
-    id: string;
-    username: string;
-    email: string;
-    name: string;
-  }
-
-  interface Session {
-    user: User;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    username: string;
+export const authConfig: NextAuthConfig = {
+  providers: [
+    Credentials({
+      async authorize(credentials) {
+        // 1. Validate input
+        const { identifier, password } = credentials
+
+        // 2. Rate limit (5 attempts per 15 minutes per IP:identifier)
+        const ip = await getClientIp()
+        await checkRateLimit(`${ip}:${identifier}`, 'login', 5, 15)
+
+        // 3. Find user by email OR username (case-insensitive)
+        const user = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { email: identifier.toLowerCase() },
+              { username: identifier.toLowerCase() }
+            ]
+          }
+        })
+        if (!user) return null
+
+        // 4. Verify password
+        const isValid = await bcrypt.compare(password, user.hashedPassword)
+        if (!isValid) return null
+
+        // 5. Return user for JWT
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          username: user.username
+        }
+      }
+    })
+  ],
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60 // 30 days
   }
 }
 ```
-
----
-
-## 12. Environment Setup
-
-### 12.1 Required Environment Variables
-
-**File**: `.env` (create from `.env.example`)
-
-```bash
-# Database Connection
-DATABASE_URL="postgresql://user:password@localhost:5432/companion_hub"
-
-# NextAuth Configuration
-NEXTAUTH_SECRET="<generate-with-openssl-rand-base64-32>"
-NEXTAUTH_URL="http://localhost:3000"
-
-# Novita AI API
-NOVITA_KEY="<your-novita-api-key>"
-
-# Stable Diffusion Forge
-SD_API_URL="http://<sd-forge-host>:<port>"
-
-# Optional
-NODE_ENV="development"
-```
-
-### 12.2 Generating Secrets
-
-**NEXTAUTH_SECRET**:
-```bash
-openssl rand -base64 32
-```
-
-**Example**: `vZQM8fF5nL7pK9wX2tY6mN4hG3jB8sR1dQ0cA5vW7eU=`
-
-### 12.3 External Services Setup
-
-#### PostgreSQL
-
-**Option 1: Docker Compose**
-```bash
-docker-compose up -d postgres
-```
-
-**Option 2: Local Installation**
-```bash
-# Install PostgreSQL 15
-# Create database
-psql -U postgres
-CREATE DATABASE companion_hub;
-```
-
-**DATABASE_URL Format**:
-```
-postgresql://<username>:<password>@<host>:<port>/<database>
-```
-
-**Example**: `postgresql://postgres:password@localhost:5432/companion_hub`
-
-#### Temporal Server
-
-**Docker Compose**:
-```bash
-docker-compose up -d temporal
-```
-
-**Verify**:
-- gRPC: `telnet localhost 7233`
-- Web UI: `http://localhost:8233`
-
-#### Stable Diffusion Forge
-
-**Requirement**: Running Stable Diffusion Forge instance
-
-**Setup**:
-1. Install Stable Diffusion Forge
-2. Start with `--api` flag
-3. Note the host and port (e.g., `http://localhost:7860`)
-4. Set `SD_API_URL` in `.env`
-
-**Verification**:
-```bash
-curl http://localhost:7860/sdapi/v1/options
-```
-
-#### Novita AI
-
-**Setup**:
-1. Sign up at https://novita.ai
-2. Generate API key
-3. Set `NOVITA_KEY` in `.env`
-
-**Verification**:
-```bash
-curl -X POST https://api.novita.ai/v3/openai/chat/completions \
-  -H "Authorization: Bearer $NOVITA_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "sao10k/l31-70b-euryale-v2.2",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "max_tokens": 10
-  }'
-```
-
----
-
-## 13. Development Guide
-
-### 13.1 Initial Setup
-
-**1. Clone Repository**
-```bash
-git clone <repository-url>
-cd my-companion-hub
-```
-
-**2. Install Dependencies**
-```bash
-npm install
-```
-
-**3. Configure Environment**
-```bash
-cp .env.example .env
-# Edit .env with your values
-```
-
-**4. Start External Services**
-```bash
-docker-compose up -d
-```
-
-**5. Initialize Database**
-```bash
-npm run db:push
-```
-
-**6. Start Development Servers**
-
-**Terminal 1: Next.js Dev Server**
-```bash
-npm run dev
-```
-
-**Terminal 2: Temporal Worker**
-```bash
-npm run worker
-```
-
-**7. Access Application**
-- App: http://localhost:3000
-- Temporal UI: http://localhost:8233
-
----
-
-### 13.2 Development Workflow
-
-#### Creating a New Companion
-
-1. Navigate to http://localhost:3000/companions
-2. Click "Create Companion"
-3. Fill form:
-   - Name: "Luna"
-   - Description: "A friendly and outgoing companion who loves outdoor activities"
-   - Visual Description: "Long blonde hair, blue eyes, athletic build"
-   - User Appearance: (optional) "Short brown hair, brown eyes"
-   - Default Outfit: "gym clothes"
-   - Header Image: Upload or drag-drop image
-4. Click "Create"
-5. Redirected to companions list
-
-#### Chatting with Companion
-
-1. Select companion from sidebar or companions page
-2. Type message in chat input
-3. (Optional) Check "Generate Image" for visual response
-4. Click Send
-5. Wait for AI response (and image if requested)
-6. View companion state changes in status bar
-
-#### Generating Standalone Image
-
-1. Navigate to http://localhost:3000/generate
-2. Enter prompt: "beautiful landscape, mountains, sunset"
-3. Adjust parameters (steps, CFG scale, dimensions)
-4. Click "Generate Image"
-5. Wait for generation
-6. Download or copy to clipboard
-
----
-
-### 13.3 Database Management
-
-#### Prisma Studio (Visual Editor)
-
-```bash
-npm run db:studio
-```
-
-**Access**: http://localhost:5555
 
 **Features**:
-- Browse all tables
-- Edit records
-- Create test data
-- Delete records
+- Accepts username OR email for login
+- Case-insensitive matching
+- Rate limited: 5 attempts per 15 minutes per IP+identifier
+- JWT session strategy
+- 30-day session expiration
 
-#### Database Migrations
+---
 
-**Push Schema Changes**:
-```bash
-npm run db:push
+### Authorization Helpers
+
+**File**: `src/lib/auth-helpers.ts`
+
+#### getAuthenticatedUser()
+```typescript
+export async function getAuthenticatedUser() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    throw new Error('Unauthorized')
+  }
+  return {
+    id: session.user.id,
+    email: session.user.email!,
+    name: session.user.name!,
+    username: session.user.username!
+  }
+}
 ```
 
-**Generate Prisma Client** (after schema changes):
+Used in all protected server actions to verify authentication.
+
+#### verifyCompanionOwnership()
+```typescript
+export async function verifyCompanionOwnership(companionId: string, userId: string) {
+  const companion = await prisma.companion.findUnique({
+    where: { id: companionId },
+    select: { userId: true }
+  })
+
+  if (!companion) {
+    throw new Error('Companion not found')
+  }
+
+  if (companion.userId !== userId) {
+    throw new Error('Unauthorized: You do not own this companion')
+  }
+
+  return companion
+}
+```
+
+Prevents users from accessing/modifying other users' companions.
+
+---
+
+### Security Features
+
+1. **Password Hashing**: bcryptjs with 10 salt rounds
+2. **Rate Limiting**: IP-based (registration, login) and user-based (actions)
+3. **Case-Insensitive Login**: Users can use any case for username/email
+4. **Session Management**: JWT tokens with 30-day expiration
+5. **Authorization Checks**: Ownership verification on all mutations
+6. **No Password Logging**: Passwords never appear in logs
+
+---
+
+## Chat & Workflow System
+
+### Overview
+The chat system uses a **non-blocking, async architecture** powered by Temporal.io. When a user sends a message, the system:
+1. Creates a user message record
+2. Starts a background Temporal workflow
+3. Returns immediately (no waiting)
+4. Streams updates via Server-Sent Events (SSE)
+5. Finalizes the assistant message when workflow completes
+
+This architecture ensures the UI never freezes, even during slow LLM/image generation.
+
+---
+
+### Sending a Message
+
+**File**: `src/app/chat-actions.ts`
+
+```typescript
+export async function sendMessage(
+  companionId: string,
+  content: string,
+  generateImage: boolean = false
+) {
+  // 1. Authenticate
+  const user = await getAuthenticatedUser()
+
+  // 2. Verify ownership
+  await verifyCompanionOwnership(companionId, user.id)
+
+  // 3. Rate limit (30 messages per minute)
+  await checkRateLimit(`${user.id}:chat`, 'chat', 30, 1)
+
+  // 4. Create user message
+  const userMessage = await prisma.message.create({
+    data: {
+      companionId,
+      role: 'user',
+      content
+    }
+  })
+
+  // 5. Create workflow execution record
+  const workflowId = `chat-${nanoid()}`
+  const execution = await prisma.workflowExecution.create({
+    data: {
+      workflowId,
+      companionId,
+      status: 'started',
+      progress: 0,
+      userMessageId: userMessage.id
+    }
+  })
+
+  // 6. Start Temporal workflow (non-blocking)
+  const client = await getTemporalClient()
+  await client.workflow.start(ChatWorkflow, {
+    taskQueue: 'companion-chat-queue',
+    workflowId,
+    args: [{
+      companionId,
+      userMessage: content,
+      userId: user.id,
+      userName: user.name,
+      shouldGenerateImage: generateImage
+    }]
+  })
+
+  // 7. Return workflow ID immediately (UI can subscribe to SSE)
+  return {
+    workflowId,
+    userMessageId: userMessage.id
+  }
+}
+```
+
+**Key Points**:
+- Returns **immediately** after starting workflow (doesn't wait for completion)
+- Rate limited: 30 messages per minute per user
+- Creates `WorkflowExecution` record for tracking progress
+- Frontend subscribes to `/api/chat/stream/[workflowId]` for updates
+
+---
+
+### SSE Streaming Endpoint
+
+**File**: `src/app/api/chat/stream/[workflowId]/route.ts`
+
+```typescript
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ workflowId: string }> }
+) {
+  const { workflowId } = await params
+
+  // Create SSE stream
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder()
+
+      // Poll database every 100ms
+      const interval = setInterval(async () => {
+        const execution = await prisma.workflowExecution.findUnique({
+          where: { workflowId }
+        })
+
+        if (!execution) {
+          clearInterval(interval)
+          controller.close()
+          return
+        }
+
+        // Send progress update
+        controller.enqueue(encoder.encode(
+          `event: progress\ndata: ${execution.progress}\n\n`
+        ))
+
+        // Send new tokens (if any)
+        if (execution.streamedText) {
+          controller.enqueue(encoder.encode(
+            `event: token\ndata: ${JSON.stringify(execution.streamedText)}\n\n`
+          ))
+        }
+
+        // Send completion event
+        if (execution.status === 'completed') {
+          controller.enqueue(encoder.encode(
+            `event: complete\ndata: ${JSON.stringify(execution)}\n\n`
+          ))
+          clearInterval(interval)
+          controller.close()
+        }
+
+        // Send error event
+        if (execution.status === 'failed') {
+          controller.enqueue(encoder.encode(
+            `event: error\ndata: ${JSON.stringify(execution.error)}\n\n`
+          ))
+          clearInterval(interval)
+          controller.close()
+        }
+      }, 100) // Poll every 100ms
+    }
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    }
+  })
+}
+```
+
+**Event Types**:
+- `progress`: Current progress (0-100)
+- `token`: New streamed text
+- `complete`: Workflow finished successfully
+- `error`: Workflow failed
+
+**Polling Strategy**:
+- Polls database every 100ms
+- Sends only new tokens (delta)
+- Closes stream when workflow completes or fails
+
+---
+
+### Frontend Streaming Hook
+
+**File**: `src/hooks/useWorkflowStream.ts`
+
+```typescript
+export function useWorkflowStream(workflowId: string | null) {
+  const [state, setState] = useState({
+    progress: 0,
+    streamedText: '',
+    isComplete: false,
+    error: null
+  })
+
+  useEffect(() => {
+    if (!workflowId) return
+
+    const eventSource = new EventSource(`/api/chat/stream/${workflowId}`)
+
+    eventSource.addEventListener('progress', (e) => {
+      setState(prev => ({ ...prev, progress: parseInt(e.data) }))
+    })
+
+    eventSource.addEventListener('token', (e) => {
+      const text = JSON.parse(e.data)
+      setState(prev => ({ ...prev, streamedText: text }))
+    })
+
+    eventSource.addEventListener('complete', (e) => {
+      setState(prev => ({ ...prev, isComplete: true }))
+      eventSource.close()
+    })
+
+    eventSource.addEventListener('error', (e) => {
+      const error = JSON.parse(e.data)
+      setState(prev => ({ ...prev, error, isComplete: true }))
+      eventSource.close()
+    })
+
+    // Cleanup on unmount
+    return () => eventSource.close()
+  }, [workflowId])
+
+  return state
+}
+```
+
+**Features**:
+- Subscribes to SSE endpoint
+- Updates state in real-time
+- Cleans up connection on unmount
+- Exponential backoff retry (up to 5 attempts)
+
+---
+
+### Finalizing Messages
+
+**File**: `src/app/chat-actions.ts`
+
+```typescript
+export async function finalizeMessage(
+  workflowId: string,
+  companionId: string
+) {
+  const user = await getAuthenticatedUser()
+  await verifyCompanionOwnership(companionId, user.id)
+
+  // Get completed workflow execution
+  const execution = await prisma.workflowExecution.findUnique({
+    where: { workflowId }
+  })
+
+  if (!execution || execution.status !== 'completed') {
+    throw new Error('Workflow not completed')
+  }
+
+  // Save assistant message
+  await prisma.message.create({
+    data: {
+      companionId,
+      role: 'assistant',
+      content: execution.streamedText || '',
+      imageUrl: execution.imageUrl
+    }
+  })
+
+  // Revalidate page to show real message
+  revalidatePath('/')
+}
+```
+
+Called by frontend after `complete` event received.
+
+---
+
+## Temporal Workflows
+
+### Overview
+Temporal.io orchestrates the multi-step chat workflow, ensuring reliability, retries, and fault tolerance. The main workflow is `ChatWorkflow`, which runs 5 steps to generate an AI response.
+
+---
+
+### ChatWorkflow
+
+**File**: `src/temporal/workflows.ts`
+
+```typescript
+export async function ChatWorkflow(input: ChatWorkflowInput): Promise<void> {
+  const {
+    companionId,
+    userMessage,
+    userId,
+    userName,
+    shouldGenerateImage
+  } = input
+
+  // Get workflow ID from context
+  const workflowId = workflowInfo().workflowId
+
+  try {
+    // STEP 1: Analyzing context (10-30% progress)
+    await updateProgress(workflowId, 'analyzing', 10, 'Analyzing context...')
+
+    const initialAnalysis = await executeActivity(analyzeContext, {
+      companionId,
+      userMessage,
+      aiResponse: null
+    }, { startToCloseTimeout: '2 minutes' })
+
+    await updateProgress(workflowId, 'analyzing', 30, 'Context analyzed')
+
+    // STEP 2: Generating LLM response (30-70% progress)
+    await updateProgress(workflowId, 'responding', 30, 'Generating response...')
+
+    const aiResponse = await executeActivity(generateLLMResponse, {
+      companionId,
+      userMessage,
+      userName,
+      workflowId
+    }, { startToCloseTimeout: '2 minutes' })
+
+    await updateProgress(workflowId, 'responding', 70, 'Response generated')
+
+    // STEP 3: Re-analyze context with AI response (70-80% progress)
+    const finalAnalysis = await executeActivity(analyzeContext, {
+      companionId,
+      userMessage,
+      aiResponse
+    }, { startToCloseTimeout: '2 minutes' })
+
+    await updateProgress(workflowId, 'analyzing', 80, 'Final context analyzed')
+
+    // STEP 4: Update companion state (80-85% progress)
+    if (finalAnalysis.outfit || finalAnalysis.location || finalAnalysis.action) {
+      await executeActivity(updateCompanionContext, {
+        companionId,
+        outfit: finalAnalysis.outfit,
+        location: finalAnalysis.location,
+        action: finalAnalysis.action
+      }, { startToCloseTimeout: '1 minute' })
+    }
+
+    await updateProgress(workflowId, 'responding', 85, 'Companion state updated')
+
+    // STEP 5: Generate image (85-100% progress) - Optional
+    let imageUrl: string | null = null
+    if (shouldGenerateImage) {
+      await updateProgress(workflowId, 'imaging', 85, 'Generating image...')
+
+      imageUrl = await executeActivity(generateCompanionImage, {
+        companionId,
+        outfit: finalAnalysis.outfit,
+        location: finalAnalysis.location,
+        visualTags: finalAnalysis.visualTags,
+        expression: finalAnalysis.expression,
+        lighting: finalAnalysis.lighting,
+        isUserPresent: finalAnalysis.isUserPresent
+      }, { startToCloseTimeout: '2 minutes' })
+
+      await updateProgress(workflowId, 'imaging', 95, 'Image generated')
+    }
+
+    // Mark as completed
+    await updateProgress(workflowId, 'completed', 100, 'Completed', imageUrl)
+
+  } catch (error) {
+    // Mark as failed
+    await updateProgress(workflowId, 'failed', 0, 'Failed', null, error.message)
+    throw error
+  }
+}
+
+// Helper to update workflow execution progress
+async function updateProgress(
+  workflowId: string,
+  status: string,
+  progress: number,
+  currentStep: string,
+  imageUrl?: string | null,
+  error?: string
+) {
+  await executeActivity(updateWorkflowExecution, {
+    workflowId,
+    status,
+    progress,
+    currentStep,
+    imageUrl,
+    error
+  }, { startToCloseTimeout: '30 seconds' })
+}
+```
+
+**5 Steps**:
+1. **Analyzing** (10-30%): Analyze user message to extract outfit/location/action
+2. **Responding** (30-70%): Generate LLM response with streaming
+3. **Re-analyzing** (70-80%): Analyze AI response to capture final state
+4. **Updating** (80-85%): Update companion's current outfit/location/action
+5. **Imaging** (85-100%): Generate companion image (optional)
+
+---
+
+### Activities
+
+**File**: `src/temporal/activities.ts`
+
+#### 1. analyzeContext()
+```typescript
+export async function analyzeContext(input: {
+  companionId: string
+  userMessage: string
+  aiResponse: string | null
+}): Promise<ContextAnalysis> {
+  // Fetch companion + last 10 messages
+  const companion = await prisma.companion.findUnique({
+    where: { id: input.companionId },
+    include: {
+      messages: {
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      }
+    }
+  })
+
+  // Build system prompt for context analysis
+  const systemPrompt = `You are a context analyzer...`
+
+  // Call Novita AI API
+  const response = await fetch('https://api.novita.ai/v3/openai/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.NOVITA_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-3.3-70b-instruct',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+        ...(aiResponse ? [{ role: 'assistant', content: aiResponse }] : [])
+      ],
+      max_tokens: 600,
+      temperature: 0.2
+    })
+  })
+
+  const data = await response.json()
+  const rawContent = data.choices[0].message.content
+
+  // Extract JSON (aggressive sanitization)
+  const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    // Fallback to previous state
+    return {
+      outfit: companion.currentOutfit,
+      location: companion.currentLocation,
+      action: companion.currentAction,
+      visualTags: [],
+      isUserPresent: false,
+      expression: 'neutral',
+      lighting: 'soft natural light'
+    }
+  }
+
+  const parsed = JSON.parse(jsonMatch[0])
+  return {
+    outfit: parsed.outfit || companion.currentOutfit,
+    location: parsed.location || companion.currentLocation,
+    action: parsed.action || companion.currentAction,
+    visualTags: parsed.visualTags || [],
+    isUserPresent: parsed.isUserPresent || false,
+    expression: parsed.expression || 'neutral',
+    lighting: parsed.lighting || 'soft natural light'
+  }
+}
+```
+
+**Purpose**: Extract structured context from conversation (outfit, location, action, expression, lighting)
+
+---
+
+#### 2. generateLLMResponse()
+```typescript
+export async function generateLLMResponse(input: {
+  companionId: string
+  userMessage: string
+  userName: string
+  workflowId: string
+}): Promise<string> {
+  // Fetch companion + history
+  const companion = await prisma.companion.findUnique({
+    where: { id: input.companionId },
+    include: {
+      messages: {
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      }
+    }
+  })
+
+  // Build conversation history
+  const messages = [
+    {
+      role: 'system',
+      content: `You are ${companion.name}. ${companion.description}
+Current state: ${companion.currentOutfit}, ${companion.currentLocation}, ${companion.currentAction}
+User: ${input.userName} (${companion.userAppearance || 'appearance not specified'})`
+    },
+    ...companion.messages.reverse().map(m => ({
+      role: m.role,
+      content: m.content
+    })),
+    { role: 'user', content: input.userMessage }
+  ]
+
+  // Call Novita AI with streaming
+  const response = await fetch('https://api.novita.ai/v3/openai/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.NOVITA_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'sao10k/l31-70b-euryale-v2.2',
+      messages,
+      max_tokens: 200,
+      temperature: 0.9,
+      stream: true
+    })
+  })
+
+  // Process SSE stream
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let fullText = ''
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6)
+        if (data === '[DONE]') break
+
+        const parsed = JSON.parse(data)
+        const token = parsed.choices[0]?.delta?.content || ''
+        fullText += token
+
+        // Write to DB every 100ms for SSE polling
+        await prisma.workflowExecution.update({
+          where: { workflowId: input.workflowId },
+          data: { streamedText: fullText }
+        })
+      }
+    }
+  }
+
+  // Clean text (remove asterisk actions, parentheticals)
+  const cleaned = fullText
+    .replace(/\*[^*]+\*/g, '') // Remove *actions*
+    .replace(/\([^)]+\)/g, '') // Remove (thoughts)
+    .trim()
+
+  return cleaned
+}
+```
+
+**Purpose**: Generate AI response with streaming, write tokens to DB for SSE polling
+
+---
+
+#### 3. generateCompanionImage()
+```typescript
+export async function generateCompanionImage(input: {
+  companionId: string
+  outfit: string
+  location: string
+  visualTags: string[]
+  expression: string
+  lighting: string
+  isUserPresent: boolean
+}): Promise<string> {
+  // Fetch companion
+  const companion = await prisma.companion.findUnique({
+    where: { id: input.companionId }
+  })
+
+  // Smart outfit filtering (remove underwear if outerwear present)
+  const outfitLower = input.outfit.toLowerCase()
+  const hasOuterwear = ['dress', 'shirt', 'jacket', 'coat', 'robe', 'kimono'].some(
+    item => outfitLower.includes(item)
+  )
+  const filteredOutfit = hasOuterwear
+    ? input.outfit.replace(/\b(bra|panties|underwear)\b/gi, '').trim()
+    : input.outfit
+
+  // Build prompt
+  const characterTags = companion.visualDescription
+  const outfitTags = filteredOutfit
+  const locationTags = input.location
+  const extraTags = input.visualTags.join(', ')
+  const expressionTag = input.expression
+  const lightingTag = input.lighting
+
+  // User appearance (if present and not virtual context)
+  const virtualContexts = ['pov', 'selfie', 'mirror', 'photo']
+  const isVirtualContext = virtualContexts.some(ctx =>
+    input.location.toLowerCase().includes(ctx)
+  )
+  const userAppearance = (input.isUserPresent && !isVirtualContext && companion.userAppearance)
+    ? companion.userAppearance
+    : ''
+
+  const fullPrompt = [
+    characterTags,
+    outfitTags,
+    locationTags,
+    extraTags,
+    expressionTag,
+    lightingTag,
+    userAppearance
+  ].filter(Boolean).join(', ')
+
+  // Negative prompt
+  const baseNegative = 'bad quality, ugly, deformed, mutated, cropped'
+  const soloNegative = input.isUserPresent ? '' : ', 1boy, male, man, penis, boyfriend'
+  const groupNegative = input.isUserPresent ? ', extra limbs, floating limbs' : ''
+  const nudeNegative = outfitLower.includes('naked') || outfitLower.includes('nude')
+    ? ', clothes, shirt, bra, panties'
+    : ''
+
+  const negativePrompt = baseNegative + soloNegative + groupNegative + nudeNegative
+
+  // Call Stable Diffusion API
+  const response = await fetch(`${env.SD_API_URL}/sdapi/v1/txt2img`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: fullPrompt,
+      negative_prompt: negativePrompt,
+      width: 832,
+      height: 1216,
+      steps: 28,
+      cfg_scale: 6,
+      sampler_name: 'DPM++ 2M',
+      batch_size: 1
+    })
+  })
+
+  const data = await response.json()
+  const base64Image = data.images[0]
+
+  // Upload to storage
+  const uploadResult = await uploadImage(
+    base64Image,
+    companion.id,
+    'companion-generated'
+  )
+
+  return uploadResult.url
+}
+```
+
+**Purpose**: Generate SD image with smart outfit filtering and context-aware prompts
+
+---
+
+#### 4. updateCompanionContext()
+```typescript
+export async function updateCompanionContext(input: {
+  companionId: string
+  outfit?: string
+  location?: string
+  action?: string
+}): Promise<void> {
+  await prisma.companion.update({
+    where: { id: input.companionId },
+    data: {
+      currentOutfit: input.outfit,
+      currentLocation: input.location,
+      currentAction: input.action
+    }
+  })
+}
+```
+
+**Purpose**: Update companion's dynamic state
+
+---
+
+### Workflow Configuration
+
+**Task Queue**: `companion-chat-queue`
+
+**Timeouts**:
+- `startToCloseTimeout`: 2 minutes (activities), 30 seconds (updates)
+
+**Retries**:
+- Max attempts: 3
+- Initial interval: 1 second
+- Backoff coefficient: 2.0
+- Max interval: 10 seconds
+
+---
+
+## Image Generation
+
+### Overview
+Image generation uses **Stable Diffusion Forge API** with intelligent prompt construction, outfit filtering, and context awareness.
+
+---
+
+### Direct Image Generation
+
+**File**: `src/app/image-actions.ts`
+
+```typescript
+export async function generateImage(
+  companionId: string,
+  prompt?: string
+) {
+  const user = await getAuthenticatedUser()
+  await verifyCompanionOwnership(companionId, user.id)
+
+  // Rate limit: 10 images per hour
+  await checkRateLimit(`${user.id}:image`, 'image', 10, 60)
+
+  // Fetch companion
+  const companion = await prisma.companion.findUnique({
+    where: { id: companionId }
+  })
+
+  // Build prompt
+  const fullPrompt = prompt || [
+    companion.visualDescription,
+    companion.currentOutfit,
+    companion.currentLocation,
+    'high quality, detailed'
+  ].join(', ')
+
+  // Call SD API
+  const response = await fetch(`${env.SD_API_URL}/sdapi/v1/txt2img`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: fullPrompt,
+      negative_prompt: 'bad quality, ugly, deformed',
+      width: 832,
+      height: 1216,
+      steps: 28,
+      cfg_scale: 6,
+      sampler_name: 'DPM++ 2M'
+    })
+  })
+
+  const data = await response.json()
+  const base64Image = data.images[0]
+
+  // Upload & optimize
+  const result = await uploadImage(base64Image, companionId, 'companion-generated')
+
+  return result
+}
+```
+
+**Rate Limiting**: 10 images per hour per user
+
+---
+
+### Image Upload & Optimization
+
+**File**: `src/lib/storage.ts`
+
+```typescript
+export async function uploadImage(
+  base64Data: string,
+  companionId: string,
+  type: 'companion-header' | 'companion-generated'
+): Promise<UploadResult> {
+  // 1. Validate base64
+  if (!base64Data.startsWith('data:image/')) {
+    throw new Error('Invalid image format')
+  }
+
+  // 2. Extract MIME type and buffer
+  const matches = base64Data.match(/^data:image\/([a-zA-Z+]+);base64,(.*)$/)
+  if (!matches) throw new Error('Invalid base64 format')
+
+  const [, mimeType, base64Content] = matches
+  const buffer = Buffer.from(base64Content, 'base64')
+  const originalSize = buffer.length
+
+  // 3. Validate size (max 5MB)
+  if (originalSize > 5 * 1024 * 1024) {
+    throw new Error('Image too large (max 5MB)')
+  }
+
+  // 4. Determine max dimensions
+  const maxDimensions = type === 'companion-header'
+    ? { width: 800, height: 800 }
+    : { width: 1920, height: 1920 }
+
+  // 5. Optimize with Sharp
+  const optimizedBuffer = await sharp(buffer)
+    .resize(maxDimensions.width, maxDimensions.height, {
+      fit: 'inside',
+      withoutEnlargement: true
+    })
+    .jpeg({ quality: 85, mozjpeg: true })
+    .toBuffer()
+
+  const optimizedSize = optimizedBuffer.length
+  const compressionRatio = ((originalSize - optimizedSize) / originalSize * 100).toFixed(1)
+
+  // 6. Generate filename
+  const filename = `${nanoid()}.jpg`
+  const subdir = type === 'companion-header' ? 'profile' : 'generated'
+  const dir = path.join(process.cwd(), 'public', 'uploads', 'companions', companionId, subdir)
+
+  // 7. Ensure directory exists
+  await fs.mkdir(dir, { recursive: true })
+
+  // 8. Write file
+  const filepath = path.join(dir, filename)
+  await fs.writeFile(filepath, optimizedBuffer)
+
+  // 9. Return public URL
+  const url = `/uploads/companions/${companionId}/${subdir}/${filename}`
+
+  return {
+    url,
+    path: filepath,
+    filename,
+    originalSize,
+    optimizedSize,
+    compressionRatio: parseFloat(compressionRatio)
+  }
+}
+```
+
+**Optimization**:
+- Resize: Max 1920x1920 (generated), 800x800 (header)
+- Format: JPEG with mozjpeg compression
+- Quality: 85
+- Result: 15-35% smaller files
+
+---
+
+### Storage Operations
+
+```typescript
+// Delete single image
+export async function deleteImage(imageUrl: string): Promise<void> {
+  const filepath = path.join(process.cwd(), 'public', imageUrl)
+  await fs.unlink(filepath)
+}
+
+// Delete all companion images
+export async function deleteCompanionImages(companionId: string): Promise<void> {
+  const dir = path.join(process.cwd(), 'public', 'uploads', 'companions', companionId)
+  await fs.rm(dir, { recursive: true, force: true })
+}
+
+// Get storage stats
+export async function getStorageStats(companionId: string): Promise<{
+  totalSize: number
+  imageCount: number
+}> {
+  const dir = path.join(process.cwd(), 'public', 'uploads', 'companions', companionId)
+  let totalSize = 0
+  let imageCount = 0
+
+  const files = await fs.readdir(dir, { recursive: true })
+  for (const file of files) {
+    const stat = await fs.stat(path.join(dir, file))
+    if (stat.isFile()) {
+      totalSize += stat.size
+      imageCount++
+    }
+  }
+
+  return { totalSize, imageCount }
+}
+```
+
+---
+
+## Rate Limiting
+
+### Overview
+Rate limiting is **database-backed** (persists across server restarts) and uses a sliding window algorithm. Five strategies protect different endpoints.
+
+---
+
+### Core Implementation
+
+**File**: `src/lib/rate-limit-db.ts`
+
+```typescript
+export async function checkRateLimit(
+  identifier: string, // e.g., "192.168.1.1:login" or "user-123:chat"
+  action: string,      // "login", "register", "chat", "image", etc.
+  maxAttempts: number, // e.g., 5
+  windowMinutes: number // e.g., 15
+): Promise<void> {
+  const now = new Date()
+  const resetAt = new Date(now.getTime() + windowMinutes * 60 * 1000)
+
+  try {
+    // Find existing rate limit record
+    const existing = await prisma.rateLimit.findUnique({
+      where: {
+        identifier_action: {
+          identifier,
+          action
+        }
+      }
+    })
+
+    // If not found or expired, create fresh record
+    if (!existing || existing.resetAt < now) {
+      await prisma.rateLimit.upsert({
+        where: {
+          identifier_action: { identifier, action }
+        },
+        create: {
+          identifier,
+          action,
+          count: 1,
+          resetAt
+        },
+        update: {
+          count: 1,
+          resetAt
+        }
+      })
+      return // Allow request
+    }
+
+    // If under limit, increment count
+    if (existing.count < maxAttempts) {
+      await prisma.rateLimit.update({
+        where: { id: existing.id },
+        data: { count: existing.count + 1 }
+      })
+      return // Allow request
+    }
+
+    // Over limit, throw error
+    const resetIn = Math.ceil((existing.resetAt.getTime() - now.getTime()) / 1000 / 60)
+    throw new Error(`Rate limit exceeded. Try again in ${resetIn} minutes.`)
+
+  } catch (error) {
+    // On DB error, fail open (allow request to prevent blocking users)
+    if (error.message.includes('Rate limit exceeded')) {
+      throw error
+    }
+    console.error('Rate limit check failed:', error)
+    return
+  }
+}
+```
+
+---
+
+### Rate Limit Strategies
+
+| Action | Identifier | Max Attempts | Window | Location |
+|--------|------------|--------------|--------|----------|
+| Login | IP + username/email | 5 | 15 min | `lib/auth.ts` |
+| Register | IP only | 3 | 24 hours | `auth-actions.ts` |
+| Chat | User ID | 30 | 1 minute | `chat-actions.ts` |
+| Image | User ID | 10 | 1 hour | `image-actions.ts` |
+| Companion Create | User ID | 10 | 1 hour | `actions.ts` |
+| Settings Update | User ID | 20 | 1 hour | `actions.ts` |
+
+---
+
+### IP Extraction
+
+**File**: `src/lib/rate-limit-db.ts`
+
+```typescript
+export async function getClientIp(): Promise<string> {
+  const { headers } = await import('next/headers')
+  const headersList = await headers()
+
+  // Check for proxy headers
+  const forwardedFor = headersList.get('x-forwarded-for')
+  const realIp = headersList.get('x-real-ip')
+  const cfConnectingIp = headersList.get('cf-connecting-ip')
+
+  if (cfConnectingIp) return cfConnectingIp
+  if (realIp) return realIp
+  if (forwardedFor) return forwardedFor.split(',')[0].trim()
+
+  return 'unknown'
+}
+```
+
+Supports proxies (Cloudflare, Nginx, etc.)
+
+---
+
+### Cleanup
+
+```typescript
+export async function cleanupExpiredRateLimits(): Promise<number> {
+  const result = await prisma.rateLimit.deleteMany({
+    where: {
+      resetAt: {
+        lt: new Date()
+      }
+    }
+  })
+
+  return result.count
+}
+```
+
+Can be run manually or via cron job.
+
+---
+
+## Security
+
+### Security Headers
+
+**File**: `next.config.js`
+
+```javascript
+{
+  headers: async () => [
+    {
+      source: '/:path*',
+      headers: [
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'X-XSS-Protection', value: '1; mode=block' },
+        { key: 'Referrer-Policy', value: 'origin-when-cross-origin' },
+        {
+          key: 'Permissions-Policy',
+          value: 'camera=(), microphone=(), geolocation=()'
+        },
+        {
+          key: 'Content-Security-Policy',
+          value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://image.novita.ai; connect-src 'self' https://api.novita.ai;"
+        },
+        {
+          key: 'Strict-Transport-Security',
+          value: 'max-age=31536000; includeSubDomains'
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### Implemented Protections
+
+1. **Authentication**
+   - NextAuth v5 with JWT
+   - Bcrypt password hashing (10 rounds)
+   - 30-day session expiration
+
+2. **Authorization**
+   - Ownership verification on all mutations
+   - `verifyCompanionOwnership()` helper
+
+3. **Rate Limiting**
+   - IP-based (login, register)
+   - User-based (chat, image, companion creation)
+   - Database-backed (persistent)
+
+4. **Input Validation**
+   - Zod schemas for all user input
+   - Server-side image validation (MIME, size, format)
+
+5. **SQL Injection**
+   - Protected by Prisma ORM (parameterized queries)
+
+6. **XSS Protection**
+   - Content Security Policy (CSP)
+   - X-XSS-Protection header
+
+7. **Clickjacking**
+   - X-Frame-Options: SAMEORIGIN
+
+8. **HTTPS**
+   - Strict-Transport-Security (HSTS) in production
+
+---
+
+## API Reference
+
+### Server Actions
+
+#### Chat Actions (`src/app/chat-actions.ts`)
+
+**sendMessage()**
+```typescript
+sendMessage(
+  companionId: string,
+  content: string,
+  generateImage?: boolean
+): Promise<{ workflowId: string, userMessageId: string }>
+```
+- Creates user message
+- Starts Temporal workflow
+- Returns immediately with workflow ID
+- Rate limited: 30/min
+
+**finalizeMessage()**
+```typescript
+finalizeMessage(
+  workflowId: string,
+  companionId: string
+): Promise<void>
+```
+- Saves assistant message from completed workflow
+- Revalidates page
+
+---
+
+#### Companion Actions (`src/app/actions.ts`)
+
+**createCompanion()**
+```typescript
+createCompanion(data: {
+  name: string
+  description: string
+  visualDescription: string
+  userAppearance?: string
+  defaultOutfit: string
+  headerImageUrl?: string
+}): Promise<Companion>
+```
+- Creates new companion
+- Rate limited: 10/hour
+
+**updateCompanion()**
+```typescript
+updateCompanion(
+  id: string,
+  data: Partial<Companion>
+): Promise<Companion>
+```
+- Updates existing companion
+- Verifies ownership
+
+**deleteCompanion()**
+```typescript
+deleteCompanion(id: string): Promise<void>
+```
+- Deletes companion + all messages
+- Deletes all companion images
+- Verifies ownership
+
+**wipeCompanionMemory()**
+```typescript
+wipeCompanionMemory(
+  companionId: string
+): Promise<void>
+```
+- Deletes all messages for companion
+- Resets conversation history
+- Rate limited: 20/hour (settings action)
+
+---
+
+#### Image Actions (`src/app/image-actions.ts`)
+
+**generateImage()**
+```typescript
+generateImage(
+  companionId: string,
+  prompt?: string
+): Promise<UploadResult>
+```
+- Generates SD image
+- Uploads & optimizes
+- Rate limited: 10/hour
+
+---
+
+#### Auth Actions (`src/app/auth-actions.ts`)
+
+**register()**
+```typescript
+register(data: {
+  name: string
+  email: string
+  username: string
+  password: string
+}): Promise<void>
+```
+- Creates new user
+- Rate limited: 3/24hours (per IP)
+- Redirects to login
+
+---
+
+### API Routes
+
+#### POST `/api/auth/[...nextauth]`
+NextAuth authentication endpoints (login, logout, session)
+
+#### GET `/api/chat/stream/[workflowId]`
+SSE streaming endpoint for workflow updates
+
+**Response Events**:
+- `progress`: `{ data: number }` (0-100)
+- `token`: `{ data: string }` (streamed text)
+- `complete`: `{ data: WorkflowExecution }`
+- `error`: `{ data: string }`
+
+---
+
+## Configuration
+
+### Environment Variables
+
+**Required**:
+```bash
+DATABASE_URL=postgresql://user:password@localhost:5432/companion_hub
+NEXTAUTH_SECRET=<generate with: openssl rand -base64 32>
+NEXTAUTH_URL=http://localhost:3000
+NOVITA_KEY=<your novita ai api key>
+SD_API_URL=http://localhost:7860
+```
+
+**Optional** (with defaults):
+```bash
+TEMPORAL_ADDRESS=localhost:7233
+LOG_LEVEL=debug
+NODE_ENV=development
+```
+
+---
+
+### Prisma Setup
+
+**Generate client**:
 ```bash
 npx prisma generate
 ```
 
-#### Database Seeding
-
-**Create Seed File**: `prisma/seed.ts`
-
-**Example**:
-```typescript
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
-
-async function main() {
-  const hashedPassword = await bcrypt.hash("password123", 10);
-
-  const user = await prisma.user.create({
-    data: {
-      email: "test@example.com",
-      username: "testuser",
-      name: "Test User",
-      hashedPassword
-    }
-  });
-
-  await prisma.companion.create({
-    data: {
-      name: "Luna",
-      description: "Friendly and outgoing",
-      visualDescription: "Blonde hair, blue eyes",
-      defaultOutfit: "casual clothes",
-      currentOutfit: "casual clothes",
-      currentLocation: "living room",
-      currentAction: "looking at viewer",
-      userId: user.id
-    }
-  });
-}
-
-main()
-  .catch((e) => console.error(e))
-  .finally(async () => await prisma.$disconnect());
+**Run migrations**:
+```bash
+npx prisma migrate deploy
 ```
 
-**Run Seed**:
+**Seed database** (if needed):
 ```bash
 npx prisma db seed
 ```
 
 ---
 
-### 13.4 Debugging
+### Temporal Setup
 
-#### Server Actions
-
-**Add Logging**:
-```typescript
-export async function sendMessage(formData: FormData) {
-  console.log("sendMessage called with:", Object.fromEntries(formData));
-
-  try {
-    // ... implementation
-  } catch (error) {
-    console.error("sendMessage error:", error);
-    throw error;
-  }
-}
+**Start Temporal server**:
+```bash
+temporal server start-dev
 ```
 
-#### Temporal Workflows
-
-**View in Temporal UI**:
-1. Open http://localhost:8233
-2. Navigate to "Workflows"
-3. Find workflow by ID (format: `chat-<companionId>-<nanoid>`)
-4. View execution history
-5. Check activity inputs/outputs
-
-**Add Logging to Activities**:
-```typescript
-export async function analyzeContext(messageText: string) {
-  console.log("analyzeContext input:", messageText);
-
-  const result = // ... analysis
-
-  console.log("analyzeContext result:", result);
-  return result;
-}
+**Start worker**:
+```bash
+npm run temporal:worker
 ```
 
-#### Database Queries
-
-**Enable Query Logging**:
-
-**In** `src/lib/prisma.ts`:
-```typescript
-const prisma = new PrismaClient({
-  log: ['query', 'info', 'warn', 'error']
-});
-```
-
-**View in Console**: All SQL queries logged
+**Task queue**: `companion-chat-queue`
 
 ---
 
-### 13.5 Testing
+### Next.js Configuration
 
-#### Manual Testing Checklist
+**Body size limit**: 10MB (for image uploads)
 
-**Authentication**:
-- [ ] Register new user
-- [ ] Login with email
-- [ ] Login with username
-- [ ] Logout
-- [ ] Access protected pages while logged out (should redirect)
+**Security headers**: Configured in `next.config.js`
 
-**Companion Management**:
-- [ ] Create companion with all fields
-- [ ] Create companion with minimal fields
-- [ ] Edit companion
-- [ ] Delete companion (verify messages cascade delete)
-- [ ] Upload header image (drag-drop, paste, file picker)
-- [ ] Crop header image
-
-**Chat**:
-- [ ] Send message without image generation
-- [ ] Send message with image generation
-- [ ] View message history
-- [ ] Verify state updates (outfit, location, action)
-- [ ] Send long message (near 2000 char limit)
-
-**Image Generation**:
-- [ ] Generate standalone image
-- [ ] Generate contextual image in chat
-- [ ] Test different samplers
-- [ ] Test different dimensions
-- [ ] Download image
-- [ ] Copy image to clipboard
-
-**Gallery**:
-- [ ] View gallery overview
-- [ ] View individual companion gallery
-- [ ] Download image from gallery
-
-**Settings**:
-- [ ] Wipe companion memory (verify messages deleted, state reset)
+**TypeScript**: Strict mode enabled
 
 ---
 
-## 14. Deployment
+## Development Guide
 
-### 14.1 Production Checklist
+### Project Structure
 
-**Environment**:
-- [ ] Generate new `NEXTAUTH_SECRET` for production
-- [ ] Set `NEXTAUTH_URL` to production domain
-- [ ] Configure production `DATABASE_URL`
-- [ ] Set `NODE_ENV=production`
-- [ ] Secure all API keys
-
-**Database**:
-- [ ] Use managed PostgreSQL (AWS RDS, Neon, Supabase)
-- [ ] Enable SSL for database connection
-- [ ] Configure connection pooling
-- [ ] Set up automated backups
-
-**Temporal**:
-- [ ] Deploy Temporal server (Temporal Cloud or self-hosted)
-- [ ] Update Temporal connection address
-- [ ] Deploy worker as separate service
-
-**External Services**:
-- [ ] Verify Novita AI rate limits for production
-- [ ] Ensure Stable Diffusion Forge is accessible
-- [ ] Consider load balancing for SD Forge
-
-**Security**:
-- [ ] Enable HTTPS
-- [ ] Configure CSP headers
-- [ ] Implement rate limiting
-- [ ] Review CORS settings
-- [ ] Rotate all development credentials
-
-**Performance**:
-- [ ] Enable Next.js caching
-- [ ] Configure CDN for static assets
-- [ ] Monitor database query performance
-- [ ] Set up error tracking (Sentry)
-
----
-
-### 14.2 Deployment Platforms
-
-#### Vercel (Recommended for Next.js)
-
-**Limitations**:
-- Serverless functions (10-second timeout)
-- No long-running processes (worker must be deployed separately)
-
-**Setup**:
-1. Push to GitHub
-2. Connect Vercel to repository
-3. Configure environment variables
-4. Deploy
-
-**Temporal Worker**:
-- Deploy worker to separate service (Railway, Fly.io, AWS EC2)
-
-#### Docker Deployment
-
-**Create Dockerfile**:
-```dockerfile
-FROM node:20-alpine
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci --only=production
-
-COPY . .
-RUN npm run build
-
-EXPOSE 3000
-
-CMD ["npm", "start"]
 ```
-
-**Docker Compose** (full stack):
-```yaml
-version: '3.8'
-services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: companion_hub
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  temporal:
-    image: temporalio/admin-tools:latest
-    ports:
-      - "7233:7233"
-    command: temporal server start-dev
-    volumes:
-      - temporal_data:/data
-
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/companion_hub
-      NEXTAUTH_URL: http://localhost:3000
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      NOVITA_KEY: ${NOVITA_KEY}
-      SD_API_URL: ${SD_API_URL}
-    depends_on:
-      - postgres
-      - temporal
-
-  worker:
-    build: .
-    command: npm run worker
-    environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/companion_hub
-      NOVITA_KEY: ${NOVITA_KEY}
-      SD_API_URL: ${SD_API_URL}
-    depends_on:
-      - temporal
-
-volumes:
-  postgres_data:
-  temporal_data:
+src/
+├── app/                     # Next.js App Router
+│   ├── actions.ts           # Companion CRUD
+│   ├── chat-actions.ts      # Chat workflow
+│   ├── auth-actions.ts      # Registration
+│   ├── image-actions.ts     # Image generation
+│   ├── page.tsx             # Chat interface
+│   ├── layout.tsx           # Root layout
+│   ├── api/                 # API routes
+│   ├── companions/          # Companion pages
+│   ├── gallery/             # Image gallery
+│   ├── generate/            # Direct image gen
+│   ├── login/               # Login page
+│   ├── register/            # Registration page
+│   └── settings/            # Settings page
+├── components/              # React components
+│   ├── ChatContainer.tsx    # Chat UI
+│   ├── ChatForm.tsx         # Message input
+│   ├── ChatMessages.tsx     # Message display
+│   ├── companion-form.tsx   # Companion form
+│   ├── companion-wizard.tsx # Creation wizard
+│   └── ...
+├── hooks/                   # React hooks
+│   └── useWorkflowStream.ts # SSE streaming
+├── lib/                     # Utilities
+│   ├── auth.ts              # NextAuth config
+│   ├── auth-helpers.ts      # Auth utilities
+│   ├── prisma.ts            # Prisma client
+│   ├── temporal.ts          # Temporal client
+│   ├── storage.ts           # Image storage
+│   ├── rate-limit-db.ts     # Rate limiting
+│   ├── validation.ts        # Zod schemas
+│   ├── logger.ts            # Pino logging
+│   └── env.ts               # Env validation
+├── temporal/                # Temporal workflows
+│   ├── workflows.ts         # ChatWorkflow
+│   └── activities.ts        # Activities
+├── types/                   # TypeScript types
+│   └── index.ts             # All interfaces
+└── __tests__/               # Tests
+    └── registration.test.ts # Registration tests
 ```
 
 ---
 
-### 14.3 Scaling Considerations
+### Running Locally
 
-**Database**:
-- Enable connection pooling (PgBouncer)
-- Add read replicas for heavy read workloads
-- Implement database caching (Redis)
-
-**Temporal**:
-- Scale workers horizontally (multiple instances)
-- Use Temporal Cloud for managed infrastructure
-- Monitor workflow execution times
-
-**Image Storage**:
-- Move from base64 to object storage (S3, Cloudflare R2)
-- Implement image CDN
-- Add image compression
-
-**Rate Limiting**:
-- Implement per-user rate limits
-- Add API key management for Novita/SD
-- Monitor and alert on quota usage
-
----
-
-## 15. API Reference
-
-### 15.1 Server Actions
-
-#### Companion Actions (src/app/actions.ts)
-
-**createCompanion**
-```typescript
-async function createCompanion(formData: FormData): Promise<ActionResult>
+1. **Install dependencies**:
+```bash
+npm install
 ```
-**Parameters**:
-- `name` (string): Companion name (1-100 chars)
-- `description` (string): Personality traits (min 10 chars)
-- `visualDescription` (string): Physical appearance (min 10 chars)
-- `userAppearance` (string, optional): User's appearance
-- `defaultOutfit` (string): Initial outfit (min 1 char)
-- `headerImage` (string, optional): Base64 image data
 
-**Returns**: `{ success: boolean, error?: string }`
-
----
-
-**updateCompanion**
-```typescript
-async function updateCompanion(
-  companionId: string,
-  formData: FormData
-): Promise<ActionResult>
+2. **Setup database**:
+```bash
+npx prisma migrate deploy
+npx prisma generate
 ```
-**Parameters**: Same as createCompanion + `companionId`
-**Behavior**: Resets currentOutfit to defaultOutfit
 
----
-
-**deleteCompanion**
-```typescript
-async function deleteCompanion(companionId: string): Promise<ActionResult>
+3. **Start Temporal**:
+```bash
+temporal server start-dev
 ```
-**Behavior**: Cascade deletes all messages
 
----
-
-**getCompanions**
-```typescript
-async function getCompanions(): Promise<Companion[]>
+4. **Start Temporal worker**:
+```bash
+npm run temporal:worker
 ```
-**Returns**: Array of user's companions
 
----
-
-**wipeCompanionMemory**
-```typescript
-async function wipeCompanionMemory(companionId: string): Promise<ActionResult>
+5. **Start Stable Diffusion** (if using local SD):
+```bash
+# Follow SD Forge setup instructions
 ```
-**Behavior**: Deletes all messages, resets state to defaults
 
----
-
-#### Chat Actions (src/app/chat-actions.ts)
-
-**sendMessage**
-```typescript
-async function sendMessage(formData: FormData): Promise<ActionResult>
+6. **Start Next.js dev server**:
+```bash
+npm run dev
 ```
-**Parameters**:
-- `message` (string): User message (1-2000 chars)
-- `companionId` (string): UUID
-- `generateImage` (boolean, optional): Generate image with response
 
-**Process**:
-1. Validates input
-2. Saves user message
-3. Starts Temporal workflow
-4. Saves AI response
-5. Revalidates page
-
-**Returns**: `{ success: boolean, error?: string }`
-
----
-
-#### Image Actions (src/app/image-actions.ts)
-
-**generateStandaloneImage**
-```typescript
-async function generateStandaloneImage(
-  formData: FormData
-): Promise<ActionResult<{ imageUrl: string }>>
+7. **Open browser**:
 ```
-**Parameters**:
-- `prompt` (string): Positive prompt
-- `negative_prompt` (string): Negative prompt
-- `width` (number): Image width
-- `height` (number): Image height
-- `steps` (number): Sampling steps
-- `cfg_scale` (number): CFG scale
-- `seed` (number): Seed (-1 = random)
-- `sampler_name` (string): Sampler method
-
-**Returns**: `{ success: boolean, data: { imageUrl: string }, error?: string }`
-
----
-
-#### Auth Actions (src/app/auth-actions.ts)
-
-**registerUser**
-```typescript
-async function registerUser(formData: FormData): Promise<ActionResult>
-```
-**Parameters**:
-- `name` (string): Display name
-- `email` (string): Valid email
-- `username` (string): 3-20 chars, alphanumeric + underscore
-- `password` (string): Min 8 chars
-
-**Validation**:
-- Email uniqueness
-- Username uniqueness
-- Password hashing (bcrypt, 10 rounds)
-
-**Returns**: `{ success: boolean, error?: string }`
-
----
-
-### 15.2 Temporal Activities
-
-#### analyzeContext
-```typescript
-async function analyzeContext(
-  messageText: string
-): Promise<LLMAnalysisResponse>
-```
-**Returns**:
-```typescript
-{
-  outfit: string;
-  location: string;
-  action_summary: string;
-  visual_tags: string[];
-  is_user_present: boolean;
-  expression: string;
-  lighting: string;
-}
+http://localhost:3000
 ```
 
 ---
 
-#### generateLLMResponse
-```typescript
-async function generateLLMResponse(
-  companionId: string,
-  companionName: string,
-  userMessage: string,
-  userName: string,
-  currentOutfit: string,
-  currentLocation: string,
-  currentAction: string,
-  msgHistory: MessageHistory[]
-): Promise<string>
+### Testing
+
+**Run tests**:
+```bash
+npm test
 ```
-**Returns**: AI response text (1-3 sentences)
+
+**Run tests with UI**:
+```bash
+npm run test:ui
+```
+
+**Test framework**: Vitest
+
+**Existing tests**:
+- `src/__tests__/registration.test.ts` (40+ test cases)
 
 ---
 
-#### generateCompanionImage
-```typescript
-async function generateCompanionImage(
-  companionId: string,
-  visualDescription: string,
-  userAppearance: string | null,
-  context: LLMAnalysisResponse
-): Promise<string>
+### Logging
+
+**Development**: Pretty-printed with colors
 ```
-**Returns**: Base64 data URL
-
----
-
-#### updateCompanionContext
-```typescript
-async function updateCompanionContext(
-  companionId: string,
-  newOutfit: string,
-  newLocation: string,
-  newAction: string
-): Promise<void>
+[14:32:15.123] INFO (ChatWorkflow): Starting workflow
+  companionId: "abc-123"
+  userId: "user-456"
 ```
 
----
-
-### 15.3 External API Endpoints
-
-#### Novita AI
-
-**Endpoint**: `https://api.novita.ai/v3/openai/chat/completions`
-
-**Method**: POST
-
-**Headers**:
+**Production**: JSON format for log aggregators
 ```json
-{
-  "Authorization": "Bearer <NOVITA_KEY>",
-  "Content-Type": "application/json"
-}
+{"level":30,"time":1673894523123,"name":"ChatWorkflow","msg":"Starting workflow","companionId":"abc-123"}
 ```
 
-**Body**:
-```json
-{
-  "model": "sao10k/l31-70b-euryale-v2.2",
-  "messages": [
-    { "role": "system", "content": "..." },
-    { "role": "user", "content": "..." }
-  ],
-  "temperature": 0.85,
-  "max_tokens": 150,
-  "top_p": 0.95,
-  "repetition_penalty": 1.1
-}
-```
+**Log levels**: trace, debug, info, warn, error, fatal
 
-**Response**:
-```json
-{
-  "choices": [{
-    "message": {
-      "content": "AI response text"
-    }
-  }]
-}
-```
+**Module loggers**:
+- `workflowLogger` - Temporal activities
+- `dbLogger` - Database operations
+- `apiLogger` - API endpoints
+- `authLogger` - Authentication events
 
 ---
 
-#### Stable Diffusion Forge
+### Common Tasks
 
-**Endpoint**: `${SD_API_URL}/sdapi/v1/txt2img`
+**Add a new Server Action**:
+1. Create function in appropriate `*-actions.ts` file
+2. Add `"use server"` directive at top
+3. Authenticate with `getAuthenticatedUser()`
+4. Verify ownership if needed
+5. Add rate limiting
+6. Validate input with Zod
+7. Perform operation
+8. Revalidate path if needed
 
-**Method**: POST
+**Add a new Temporal Activity**:
+1. Define function in `src/temporal/activities.ts`
+2. Export it
+3. Call from workflow using `executeActivity()`
+4. Set timeout (default: 2 minutes)
 
-**Headers**:
-```json
-{
-  "Content-Type": "application/json"
-}
-```
+**Add a new Component**:
+1. Create in `src/components/`
+2. Use TypeScript with proper types
+3. Mark as `"use client"` if interactive
+4. Import and use in pages
 
-**Body**:
-```json
-{
-  "prompt": "...",
-  "negative_prompt": "...",
-  "width": 832,
-  "height": 1216,
-  "steps": 28,
-  "cfg_scale": 6.0,
-  "seed": -1,
-  "sampler_name": "DPM++ 2M"
-}
-```
+---
 
-**Response**:
-```json
-{
-  "images": ["base64_encoded_png_data"]
-}
-```
+### Performance Tips
+
+1. **Database queries**: Use composite indexes for common queries
+2. **Image optimization**: Always use Sharp for compression
+3. **Rate limiting**: Adjust limits based on usage patterns
+4. **Connection pooling**: Reuse Temporal client, Prisma client
+5. **Streaming**: Use SSE for real-time updates (avoids polling overhead)
+
+---
+
+### Troubleshooting
+
+**Issue**: Temporal workflow not starting
+- **Fix**: Check Temporal server is running (`temporal server start-dev`)
+- **Fix**: Check worker is running (`npm run temporal:worker`)
+- **Fix**: Check task queue matches (`companion-chat-queue`)
+
+**Issue**: Images not generating
+- **Fix**: Check SD API is running and `SD_API_URL` is correct
+- **Fix**: Check rate limit (10/hour)
+- **Fix**: Check logs for SD API errors
+
+**Issue**: SSE not streaming
+- **Fix**: Check workflow execution record exists in database
+- **Fix**: Check workflowId matches
+- **Fix**: Check browser console for SSE errors
+
+**Issue**: Rate limit blocking legitimate users
+- **Fix**: Adjust limits in rate limit calls
+- **Fix**: Run `cleanupExpiredRateLimits()` to clear old records
 
 ---
 
 ## Appendix
 
-### A. Validation Schemas
+### Database Migration Guide
 
-**Location**: `src/lib/validation.ts`
+**Create migration**:
+```bash
+npx prisma migrate dev --name migration_name
+```
 
-```typescript
-export const companionSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().min(10),
-  visualDescription: z.string().min(10),
-  userAppearance: z.string().optional(),
-  defaultOutfit: z.string().min(1),
-  headerImage: z.string().optional()
-});
+**Apply migration**:
+```bash
+npx prisma migrate deploy
+```
 
-export const messageSchema = z.object({
-  message: z.string().min(1).max(2000),
-  companionId: z.string().uuid(),
-  generateImage: z.boolean().optional()
-});
-
-export const registrationSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  username: z.string()
-    .min(3).max(20)
-    .regex(/^[a-z0-9_]+$/),
-  password: z.string().min(8)
-});
+**Reset database** (WARNING: deletes all data):
+```bash
+npx prisma migrate reset
 ```
 
 ---
 
-### B. Key File Locations
+### API Response Formats
 
-| Purpose | File Path |
-|---------|-----------|
-| Chat Interface | src/app/page.tsx |
-| Chat Server Actions | src/app/chat-actions.ts |
-| Companion CRUD | src/app/actions.ts |
-| Temporal Workflows | src/temporal/workflows.ts |
-| Temporal Activities | src/temporal/activities.ts |
-| Temporal Worker | src/temporal/worker.ts |
-| NextAuth Config | src/lib/auth.ts |
-| Prisma Schema | prisma/schema.prisma |
-| Validation Schemas | src/lib/validation.ts |
-| Image Generation Config | src/config/generation.ts |
-| Clothing Logic | src/config/clothing-keywords.ts |
-| Scene Enhancements | src/config/scene-enhancements.ts |
+**Success**:
+```json
+{
+  "workflowId": "chat-abc123",
+  "userMessageId": "msg-456"
+}
+```
 
----
-
-### C. Common Issues & Solutions
-
-**Issue**: Temporal connection refused
-**Solution**: Ensure Temporal server is running (`docker-compose up -d temporal`)
-
-**Issue**: Database connection error
-**Solution**: Verify `DATABASE_URL` in `.env` and PostgreSQL is running
-
-**Issue**: Image generation fails
-**Solution**: Check `SD_API_URL` is correct and Stable Diffusion Forge is running with `--api` flag
-
-**Issue**: NextAuth session not persisting
-**Solution**: Verify `NEXTAUTH_SECRET` is set and `NEXTAUTH_URL` matches your domain
-
-**Issue**: Workflow timeout
-**Solution**: Check worker logs, verify activities complete within 2 minutes
+**Error**:
+```json
+{
+  "error": "Rate limit exceeded. Try again in 5 minutes."
+}
+```
 
 ---
 
-### D. Performance Metrics
+### Supported Image Formats
 
-**Average Response Times** (local development):
-- Chat without image: 2-4 seconds
-- Chat with image: 15-30 seconds
-- Standalone image generation: 10-20 seconds
-- Page load (with 30 messages): <1 second
-
-**Database Query Counts**:
-- Chat page load: 3 queries (user, companion, messages)
-- Send message: 5 queries (user, companion, insert message, fetch history, insert response)
-- Gallery overview: 2 queries (user, companions with counts)
+**Input**: JPEG, PNG, WebP
+**Output**: JPEG (mozjpeg compressed)
+**Max size**: 5MB (before optimization)
+**Dimensions**: 832x1216 (portrait), 800x800 (profile)
 
 ---
 
-This documentation provides a comprehensive technical reference for the My Companion Hub application. For additional support, refer to the source code comments and official documentation for Next.js, Prisma, Temporal, and other dependencies.
+### Contributing
+
+1. Fork repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Make changes
+4. Add tests
+5. Commit (`git commit -m 'Add amazing feature'`)
+6. Push (`git push origin feature/amazing-feature`)
+7. Open Pull Request
+
+---
+
+### License
+
+MIT License - see LICENSE file for details
+
+---
+
+### Support
+
+For issues, questions, or contributions:
+- **GitHub Issues**: https://github.com/your-repo/companion-hub/issues
+- **Discussions**: https://github.com/your-repo/companion-hub/discussions
+
+---
+
+**Last Updated**: 2026-01-12
+**Version**: 1.0.0

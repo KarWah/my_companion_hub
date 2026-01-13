@@ -1,6 +1,6 @@
 "use client";
 
-import type { Message } from "@/types/prisma";
+import type { Message, StreamState } from "@/types";
 
 export function ChatMessages({
   initialMessages,
@@ -10,7 +10,7 @@ export function ChatMessages({
 }: {
   initialMessages: Message[];
   companionId: string;
-  streamState?: any;
+  streamState?: StreamState;
   optimisticMessage?: string | null;
 }) {
   const isStreaming = streamState && !streamState.isComplete;
@@ -27,10 +27,10 @@ export function ChatMessages({
       {initialMessages.map((msg: Message) => (
         <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
           <div className="max-w-[80%] space-y-2">
-            <div className={`p-4 rounded-2xl ${
+            <div className={`p-4 rounded-3xl ${
               msg.role === "user"
-                ? "bg-blue-600 text-white rounded-tr-none"
-                : "bg-slate-800 text-slate-200 rounded-tl-none"
+                ? "bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg text-white rounded-tr-sm"
+                : "bg-gradient-to-br from-slate-800/90 to-purple-950/30 shadow-md text-slate-200 rounded-tl-sm"
             }`}>
               {msg.content}
             </div>
@@ -47,7 +47,7 @@ export function ChatMessages({
       {shouldShowOptimistic && (
         <div className="flex justify-end">
           <div className="max-w-[80%]">
-            <div className="p-4 rounded-2xl bg-blue-600 text-white rounded-tr-none opacity-80">
+            <div className="p-4 rounded-3xl bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg text-white rounded-tr-sm opacity-80">
               {optimisticMessage}
             </div>
           </div>
@@ -58,9 +58,9 @@ export function ChatMessages({
       {isStreaming && streamingText && (
         <div className="flex justify-start">
           <div className="max-w-[80%] space-y-2">
-            <div className="p-4 rounded-2xl bg-slate-800 text-slate-200 rounded-tl-none">
+            <div className="p-4 rounded-3xl bg-gradient-to-br from-slate-800/90 to-purple-950/30 shadow-md text-slate-200 rounded-tl-sm">
               {streamingText}
-              <span className="inline-block w-1 h-4 ml-1 bg-blue-400 animate-pulse" />
+              <span className="inline-block w-1 h-4 ml-1 bg-pink-400 animate-pulse" />
             </div>
             {/* Show image placeholder or loading state */}
             {streamingImageUrl && (

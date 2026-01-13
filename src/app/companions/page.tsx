@@ -12,7 +12,7 @@ export default async function CompanionsPage() {
         <h1 className="text-3xl font-bold text-white">Your Companions</h1>
         <Link
           href="/companions/new"
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-white font-medium transition-colors"
+          className="flex items-center gap-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 hover:shadow-glow-pink px-4 py-2 rounded-2xl text-white font-medium transition-all"
         >
           <Plus size={18} /> Create New
         </Link>
@@ -22,10 +22,10 @@ export default async function CompanionsPage() {
         {companions.map((c) => (
           <div
             key={c.id}
-            className="p-6 rounded-2xl border bg-slate-900 border-slate-800 hover:border-slate-700 transition-all flex flex-col"
+            className="p-6 rounded-3xl border bg-slate-800 border-slate-700 hover:border-pink-500/30 hover:shadow-glow-pink hover:scale-[1.02] transition-all duration-300 flex flex-col"
           >
             <div className="flex items-start justify-between mb-4">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center text-slate-300 overflow-hidden">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-900/50 to-pink-900/50 flex items-center justify-center text-slate-300 overflow-hidden">
                 {c.headerImageUrl ? (
                   <img
                     src={c.headerImageUrl}
@@ -44,16 +44,16 @@ export default async function CompanionsPage() {
             </p>
             
             <div className="mt-4 pt-4 border-t border-slate-800 flex gap-2">
-                <Link 
+                <Link
                   href={`/?companionId=${c.id}`}
-                  className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 bg-slate-700/80 hover:bg-gradient-to-r hover:from-pink-600 hover:to-purple-600 text-white py-2 rounded-lg text-sm font-medium transition-all"
                 >
                   <MessageSquare size={16} /> Chat
                 </Link>
             
                 <Link
                   href={`/companions/${c.id}/edit`}
-                  className="flex items-center justify-center p-2 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg transition-colors"
+                  className="flex items-center justify-center p-2 bg-slate-700/80 hover:bg-pink-500 hover:text-white rounded-lg transition-all"
                   title="Edit Companion"
                 >
                   <Pencil size={18} />

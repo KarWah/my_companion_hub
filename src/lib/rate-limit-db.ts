@@ -18,6 +18,7 @@
  */
 
 import prisma from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 interface RateLimitResult {
   success: boolean;
@@ -124,7 +125,7 @@ export async function checkRateLimit({
 
   } catch (error) {
     // On database error, fail open (allow the request) to prevent blocking legitimate users
-    console.error('Rate limit check failed:', error);
+    logger.error({ error, identifier, action }, 'Rate limit check failed');
     return {
       success: true,
       remaining: maxAttempts,
@@ -178,7 +179,7 @@ export async function cleanupExpiredRateLimits(): Promise<number> {
 
     return result.count;
   } catch (error) {
-    console.error('Failed to cleanup expired rate limits:', error);
+    logger.error({ error }, 'Failed to cleanup expired rate limits');
     return 0;
   }
 }

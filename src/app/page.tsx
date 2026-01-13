@@ -1,7 +1,7 @@
 import { getActiveCompanion } from "@/app/actions";
 import prisma from "@/lib/prisma";
 import { ChatContainer } from "@/components/ChatContainer";
-import type { Message } from "@/types/prisma";
+import type { Message } from "@/types/index";
 
 export default async function ChatPage({
   searchParams,
@@ -29,9 +29,9 @@ export default async function ChatPage({
 
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto">
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between sticky top-0 bg-slate-950/80 backdrop-blur-md z-10">
+      <div className="p-4 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800/95 backdrop-blur-md z-10">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center text-slate-300 overflow-hidden flex-shrink-0">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-900/50 to-pink-900/50 flex items-center justify-center text-slate-300 overflow-hidden flex-shrink-0">
             {companion.headerImageUrl ? (
               <img
                 src={companion.headerImageUrl}

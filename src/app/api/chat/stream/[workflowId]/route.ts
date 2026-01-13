@@ -1,6 +1,8 @@
 import { Client, Connection } from '@temporalio/client';
 import prisma from '@/lib/prisma';
 import { getAuthenticatedUser } from '@/lib/auth-helpers';
+import { apiLogger } from '@/lib/logger';
+import { env } from '@/lib/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +29,7 @@ export async function GET(
 
     const stream = new ReadableStream({
       async start(controller) {
-        const connection = await Connection.connect({ address: 'localhost:7233' });
+        const connection = await Connection.connect({ address: env.TEMPORAL_ADDRESS });
         const client = new Client({ connection });
 
         try {
@@ -51,7 +53,7 @@ export async function GET(
               });
 
               if (!dbExecution) {
-                console.error('WorkflowExecution not found');
+                apiLogger.error({ workflowId }, 'WorkflowExecution not found');
                 return;
               }
 
@@ -67,9 +69,17 @@ export async function GET(
               }
 
               // Also query workflow for progress updates
-              let workflowProgress;
+              let workflowProgress: {
+                status: string;
+                progress: number;
+                currentStep: string;
+              };
               try {
-                workflowProgress = await handle.query('progress');
+                workflowProgress = await handle.query('progress') as {
+                  status: string;
+                  progress: number;
+                  currentStep: string;
+                };
               } catch (queryError) {
                 // Workflow might not be ready yet, use DB status
                 workflowProgress = {
@@ -101,14 +111,14 @@ export async function GET(
                   })}\n\n`;
                   controller.enqueue(encoder.encode(completeEvent));
                 } catch (resultError) {
-                  console.error('Error getting workflow result:', resultError);
+                  apiLogger.error({ error: resultError, workflowId }, 'Error getting workflow result');
                   const errorEvent = `event: error\ndata: ${JSON.stringify({ error: String(resultError) })}\n\n`;
                   controller.enqueue(encoder.encode(errorEvent));
                 }
                 controller.close();
               }
             } catch (error) {
-              console.error('SSE poll error:', error);
+              apiLogger.error({ error, workflowId }, 'SSE poll error');
               // Continue polling even if query fails temporarily
             }
           }, 100);
@@ -120,7 +130,7 @@ export async function GET(
           });
 
         } catch (error) {
-          console.error('SSE setup error:', error);
+          apiLogger.error({ error, workflowId }, 'SSE setup error');
           const errorEvent = `event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`;
           controller.enqueue(encoder.encode(errorEvent));
           controller.close();
@@ -136,7 +146,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('SSE endpoint error:', error);
+    apiLogger.error({ error }, 'SSE endpoint error');
     return new Response('Internal Server Error', { status: 500 });
   }
 }

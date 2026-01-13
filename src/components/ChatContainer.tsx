@@ -3,8 +3,7 @@
 import { useState, useCallback } from "react";
 import { ChatForm } from "./ChatForm";
 import { ChatMessages } from "./ChatMessages";
-import type { Message } from "@/types/prisma";
-import type { StreamState } from "@/types/workflow";
+import type { Message, StreamState } from "@/types";
 
 export function ChatContainer({
   initialMessages,
@@ -15,7 +14,7 @@ export function ChatContainer({
   companionId: string;
   companionName: string;
 }) {
-  const [streamState, setStreamState] = useState<StreamState | null>(null);
+  const [streamState, setStreamState] = useState<StreamState | undefined>(undefined);
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(null);
 
   const handleStreamUpdate = useCallback((state: StreamState) => {
@@ -46,7 +45,7 @@ export function ChatContainer({
         />
       </div>
 
-      <div className="p-4 border-t border-slate-800 bg-slate-950">
+      <div className="p-4 border-t border-slate-700 bg-slate-800">
         <ChatForm
           companionId={companionId}
           companionName={companionName}

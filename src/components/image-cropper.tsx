@@ -216,7 +216,7 @@ export function ImageCropper({ imageUrl, onSave, onCancel }: ImageCropperProps) 
             <button
               type="button"
               onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-white flex items-center gap-2"
+              className="px-4 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 hover:shadow-glow-pink rounded-lg transition-all text-white flex items-center gap-2"
             >
               <Check size={18} />
               Save Crop
