@@ -80,7 +80,7 @@ export default async function GalleryPage() {
                     {companion.name}
                   </h3>
                   <p className="text-sm text-slate-400 line-clamp-2">
-                    {companion.description.substring(0, 100)}...
+                    {companion.description.length > 100 ? companion.description.substring(0, 100) + '...' : companion.description}
                   </p>
                 </div>
               </div>

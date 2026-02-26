@@ -43,7 +43,9 @@ export async function analyzeConversationContext(
   });
 
   // Map history to explicit names to prevent 'Subject Confusion'
-  const recentHistory = history.slice(-4).map(m => {
+  // Use 8 messages (4 exchanges) so gradual outfit/scene changes over multiple turns
+  // remain visible — e.g. clothing removed 3-4 messages ago is still trackable.
+  const recentHistory = history.slice(-8).map(m => {
     const speaker = m.role === "user" ? `User (${userName})` : `Companion (${companionName})`;
     return `${speaker}: ${m.content}`;
   }).join("\n");
@@ -101,7 +103,8 @@ export async function analyzeConversationContext(
         visualTags: "",
         isUserPresent: false,
         expression: "neutral",
-        lighting: "cinematic lighting"
+        lighting: "cinematic lighting",
+        mood: "neutral",
       };
     }
 
@@ -117,6 +120,13 @@ export async function analyzeConversationContext(
       newOutfit = currentOutfit;
     }
 
+    const VALID_MOODS = new Set([
+      'neutral', 'happy', 'playful', 'affectionate', 'excited', 'flirty',
+      'melancholic', 'irritated', 'jealous', 'worried', 'embarrassed', 'aroused'
+    ]);
+    const parsedMood = cleanTagString(parsed.mood)?.toLowerCase() || 'neutral';
+    const mood = VALID_MOODS.has(parsedMood) ? parsedMood : 'neutral';
+
     const result: ContextAnalysis = {
       outfit: newOutfit,
       location: cleanTagString(parsed.location) || currentLocation,
@@ -124,7 +134,8 @@ export async function analyzeConversationContext(
       visualTags: cleanTagString(parsed.visual_tags),
       isUserPresent: !!parsed.is_user_present,
       expression: cleanTagString(parsed.expression) || "neutral",
-      lighting: cleanTagString(parsed.lighting) || "cinematic lighting"
+      lighting: cleanTagString(parsed.lighting) || "cinematic lighting",
+      mood,
     };
 
     log.info({
@@ -147,7 +158,8 @@ export async function analyzeConversationContext(
       visualTags: "",
       isUserPresent: false,
       expression: "neutral",
-      lighting: "cinematic lighting"
+      lighting: "cinematic lighting",
+      mood: "neutral",
     };
   }
 }

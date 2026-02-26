@@ -403,6 +403,164 @@ export async function cleanupOrphanedImages(): Promise<number> {
   return 0;
 }
 
+/**
+ * Audio upload result
+ */
+export interface AudioUploadResult {
+  url: string;           // Public URL: /uploads/companions/{id}/audio/{audioId}.mp3
+  path: string;          // File system path
+  filename: string;      // Just the filename
+  sizeBytes: number;     // File size
+}
+
+/**
+ * Uploads an audio file (MP3)
+ *
+ * @param audioBuffer - Audio data as Buffer
+ * @param companionId - Companion ID for organizing storage
+ * @returns Audio upload result with URL and metadata
+ */
+export async function uploadAudioFile(
+  audioBuffer: Buffer,
+  companionId: string
+): Promise<AudioUploadResult> {
+  const startTime = Date.now();
+  const log = storageLogger.child({ companionId, type: 'audio' });
+
+  log.debug('Starting audio upload');
+
+  try {
+    // Ensure directories exist
+    await ensureDirectories();
+
+    // Generate filename
+    const filename = `${nanoid()}.mp3`;
+
+    // Create companion audio directory
+    const audioDir = path.join(UPLOAD_BASE_DIR, 'companions', companionId, 'audio');
+    await fs.mkdir(audioDir, { recursive: true });
+
+    // Full file path
+    const filepath = path.join(audioDir, filename);
+
+    // Write file to disk
+    await fs.writeFile(filepath, audioBuffer);
+
+    // Generate public URL
+    const publicUrl = `/uploads/companions/${companionId}/audio/${filename}`;
+
+    log.info({
+      duration: Date.now() - startTime,
+      url: publicUrl,
+      sizeKB: (audioBuffer.length / 1024).toFixed(2),
+    }, 'Audio uploaded successfully');
+
+    return {
+      url: publicUrl,
+      path: filepath,
+      filename,
+      sizeBytes: audioBuffer.length,
+    };
+
+  } catch (error) {
+    log.error({
+      error: error instanceof Error ? error.message : 'Unknown error',
+      duration: Date.now() - startTime,
+    }, 'Audio upload failed');
+
+    throw error;
+  }
+}
+
+/**
+ * Deletes audio files older than the specified number of days.
+ * Walks all companion audio directories and removes stale MP3s.
+ * This prevents unlimited growth of the audio folder over time.
+ *
+ * @param olderThanDays - Delete files older than this many days
+ * @returns Number of files deleted
+ */
+export async function cleanupOldAudioFiles(olderThanDays: number = 7): Promise<number> {
+  const log = storageLogger.child({ task: 'cleanupOldAudioFiles', olderThanDays });
+  const cutoff = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
+  const companionsDir = path.join(UPLOAD_BASE_DIR, 'companions');
+  let deleted = 0;
+
+  try {
+    const companions = await fs.readdir(companionsDir);
+
+    for (const companionId of companions) {
+      const audioDir = path.join(companionsDir, companionId, 'audio');
+
+      try {
+        const files = await fs.readdir(audioDir);
+
+        for (const file of files) {
+          const filePath = path.join(audioDir, file);
+          const stats = await fs.stat(filePath);
+
+          if (stats.isFile() && stats.mtimeMs < cutoff) {
+            await fs.unlink(filePath);
+            deleted++;
+          }
+        }
+      } catch {
+        // No audio dir for this companion — skip
+      }
+    }
+  } catch {
+    // companions dir doesn't exist yet — nothing to clean
+  }
+
+  if (deleted > 0) {
+    log.info({ deleted }, 'Cleaned up old audio files');
+  }
+
+  return deleted;
+}
+
+/**
+ * Copies a companion's header image to a new companion's storage directory.
+ * Used when cloning a public companion so the clone has its own independent copy.
+ *
+ * @param sourceUrl - The original /uploads/ URL
+ * @param destCompanionId - The new companion's ID
+ * @returns The new URL, or the original URL if the source is external/missing
+ */
+export async function copyCompanionHeaderImage(
+  sourceUrl: string,
+  destCompanionId: string
+): Promise<string> {
+  const log = storageLogger.child({ destCompanionId });
+
+  if (!sourceUrl?.startsWith('/uploads/')) {
+    return sourceUrl; // External URL or empty — return as-is
+  }
+
+  const sourcePath = path.join(process.cwd(), 'public', sourceUrl);
+
+  try {
+    await fs.access(sourcePath);
+  } catch {
+    log.warn({ sourceUrl }, 'Source image not found, reusing original URL');
+    return sourceUrl;
+  }
+
+  try {
+    const filename = `${nanoid()}.jpg`;
+    const destDir = path.join(UPLOAD_BASE_DIR, 'companions', destCompanionId, 'headers');
+    await fs.mkdir(destDir, { recursive: true });
+    const destPath = path.join(destDir, filename);
+    await fs.copyFile(sourcePath, destPath);
+    const newUrl = `/uploads/companions/${destCompanionId}/headers/${filename}`;
+    log.info({ newUrl }, 'Header image copied for cloned companion');
+    return newUrl;
+  } catch (error) {
+    log.error({ error }, 'Failed to copy header image, reusing original URL');
+    return sourceUrl;
+  }
+}
+
 // Initialize directories on module load
 ensureDirectories().catch((error) => {
   storageLogger.error({ error }, 'Failed to initialize storage directories');

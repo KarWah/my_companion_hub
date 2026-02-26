@@ -43,4 +43,4 @@ export const LLM_CHAT_CONFIG = {
   topP: 0.9,
 } as const;
 
-export const LLM_MODEL = "sao10k/l31-70b-euryale-v2.2" as const;
+// Note: LLM model is configured via NOVITA_MODEL env var (see src/lib/env.ts)

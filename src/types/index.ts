@@ -35,12 +35,30 @@ export type Companion = {
 
   currentLocation: string;
   currentAction: string;
+  currentMood: string;
 
   headerImageUrl: string | null;
   headerImageLegacy: string | null;
 
   // Extended personality (JSON string)
   extendedPersonality: string | null;
+
+  // Community/Discovery fields
+  isPublic: boolean;
+  publishedAt: Date | null;
+  viewCount: number;
+  chatCount: number;
+
+  // Relationship progression
+  affectionLevel: number;
+  trustLevel: number;
+
+  // Voice Integration
+  voiceId: string | null;
+  voiceEnabled: boolean;
+
+  // Soft delete
+  deletedAt: Date | null;
 
   userId: string;
   createdAt: Date;
@@ -49,9 +67,10 @@ export type Companion = {
 
 export type Message = {
   id: string;
-  role: string;
+  role: "user" | "assistant";
   content: string;
   imageUrl: string | null;
+  audioUrl: string | null; // ElevenLabs TTS audio
   companionId: string;
   createdAt: Date;
 };
@@ -133,6 +152,10 @@ export interface CompanionWizardState {
   flirtationStyle: string;
   humorStyle: string;
   intimacyPace: string;
+
+  // Voice Settings
+  voiceId: string | null;
+  voiceEnabled: boolean;
 }
 
 export const INITIAL_WIZARD_STATE: CompanionWizardState = {
@@ -170,6 +193,10 @@ export const INITIAL_WIZARD_STATE: CompanionWizardState = {
   flirtationStyle: 'playful',
   humorStyle: 'playful',
   intimacyPace: 'natural',
+
+  // Voice Settings
+  voiceId: null,
+  voiceEnabled: false,
 };
 
 // ==========================================
@@ -185,6 +212,7 @@ export interface ContextAnalysisResponse {
   visual_tags: string;
   expression: string;
   lighting: string;
+  mood: string;
 }
 
 export interface ContextAnalysis {
@@ -195,6 +223,7 @@ export interface ContextAnalysis {
   isUserPresent: boolean;
   expression: string;
   lighting: string;
+  mood: string;
 }
 
 // ==========================================
@@ -212,6 +241,7 @@ export type WorkflowStatus =
 export interface WorkflowResult {
   text: string;
   imageUrl: string | null;
+  audioUrl: string | null;
   updatedState: {
     outfit: string;
     location: string;
@@ -226,6 +256,7 @@ export interface WorkflowProgress {
   currentStep: string;
   streamedText: string;
   imageUrl?: string | null;
+  audioUrl?: string | null;
   error?: string;
 }
 
@@ -235,6 +266,7 @@ export interface StreamState {
   currentStep: string;
   streamedText: string;
   imageUrl?: string | null;
+  audioUrl?: string | null;
   isComplete: boolean;
   error?: string;
   finalResult?: WorkflowResult;
@@ -250,4 +282,187 @@ export interface ChatWorkflowArgs {
   currentAction: string;
   msgHistory: MessageHistory[];
   shouldGenerateImage: boolean;
+  // Voice generation
+  voiceEnabled?: boolean;
+  voiceId?: string;
+  // Message ID for memory attribution
+  userMessageId?: string;
+  // Companion state at turn start (for change detection)
+  currentMood?: string;
+  // Feature flags passed from client settings
+  ragEnabled?: boolean;   // Whether to retrieve memories (default: true)
+  deepThink?: boolean;    // Whether to use extended reasoning mode (default: false)
 }
+
+// ==========================================
+// 6. MEMORY SYSTEM
+// ==========================================
+
+export interface MemoryRecord {
+  id: string;
+  companionId: string;
+  content: string;
+  category: 'personal_fact' | 'preference' | 'event' | 'relationship' | 'emotional_moment';
+  importance: number; // 1-10
+  embedding?: number[]; // 1536-dim vector
+  sourceMessageIds: string[];
+  context?: string;
+  isActive: boolean;
+  accessCount: number;
+  lastAccessedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MemoryExtractionResult {
+  memories: Array<{
+    content: string;
+    category: string;
+    importance: number;
+    context: string;
+  }>;
+  relationshipUpdate?: {
+    status: string;
+    affectionDelta: number;
+    trustDelta: number;
+  };
+}
+
+export interface MemoryRetrievalResult {
+  memories: MemoryRecord[];
+  totalRelevant: number;
+}
+
+// ==========================================
+// 7. COMMUNITY/DISCOVERY SYSTEM
+// ==========================================
+
+export interface PublicCompanion {
+  id: string;
+  name: string;
+  description: string;
+  visualDescription: string;
+  headerImageUrl: string | null;
+  style: ArtStyle;
+  relationship: string;
+  occupation: string;
+  personalityArchetype: string;
+  hobbies: string[];
+  fetishes: string[];
+  extendedPersonality: string | null;
+  viewCount: number;
+  chatCount: number;
+  publishedAt: Date | null;
+  creatorId: string;
+  creatorUsername: string;
+  averageRating: number;
+  ratingCount: number;
+}
+
+export interface DiscoveryFilters {
+  fetishes?: string[];
+  relationships?: string[];
+  occupations?: string[];
+  hobbies?: string[];
+  personalityArchetype?: string;
+  ethnicity?: string;
+  style?: ArtStyle;
+  search?: string;
+  sortBy?: 'newest' | 'popular' | 'rating';
+  page?: number;
+  limit?: number;
+}
+
+export interface Rating {
+  id: string;
+  companionId: string;
+  userId: string;
+  rating: number; // 1-5
+  review: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ==========================================
+// 8. SCHEDULED MESSAGING
+// ==========================================
+
+export interface ScheduledMessage {
+  id: string;
+  companionId: string;
+  cronExpression: string;
+  messageTemplate: string;
+  timezone: string;
+  enabled: boolean;
+  lastRunAt: Date | null;
+  nextRunAt: Date | null;
+  runCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ScheduleLog {
+  id: string;
+  scheduledMessageId: string;
+  status: 'success' | 'failed' | 'skipped';
+  workflowId: string | null;
+  error: string | null;
+  executedAt: Date;
+}
+
+export interface CreateScheduledMessageInput {
+  companionId: string;
+  cronExpression: string;
+  messageTemplate: string;
+  timezone?: string;
+}
+
+// ==========================================
+// 9. VOICE/TTS SYSTEM (ElevenLabs)
+// ==========================================
+
+export interface ElevenLabsVoice {
+  voice_id: string;
+  name: string;
+  preview_url: string;
+  category: string;
+  labels: Record<string, string>;
+}
+
+export interface VoiceSettings {
+  stability: number;
+  similarity_boost: number;
+  style?: number;
+  use_speaker_boost?: boolean;
+}
+
+// ==========================================
+// 10. AUDIT LOGGING
+// ==========================================
+
+export interface AuditLogEntry {
+  id: string;
+  userId: string | null;
+  action: string;
+  resource: string | null;
+  resourceId: string | null;
+  details: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: Date;
+}
+
+export type AuditAction =
+  | 'login'
+  | 'register'
+  | 'logout'
+  | 'companion_create'
+  | 'companion_update'
+  | 'companion_delete'
+  | 'companion_publish'
+  | 'companion_unpublish'
+  | 'companion_clone'
+  | 'message_send'
+  | 'rating_create'
+  | 'scheduled_message_create'
+  | 'scheduled_message_delete';

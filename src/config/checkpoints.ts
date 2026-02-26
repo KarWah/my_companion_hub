@@ -25,7 +25,7 @@ export type CheckpointConfig = {
 export const CHECKPOINTS: Record<'anime' | 'realistic', CheckpointConfig> = {
   anime: {
     // TODO: Replace with your anime model name from CivitAI/SD Forge
-    name: 'illustrious_or_your_anime_model.safetensors',
+    name: 'ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors',
 
     lora: {
       name: '[inukai mofu] Artist Style Illustrious_2376885',

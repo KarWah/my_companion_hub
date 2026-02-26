@@ -10,10 +10,14 @@
  */
 export const CONTENT_PATTERNS = {
   /**
-   * Detects explicit/nude content in outfit, visual tags, or location
-   * Used to determine if companion should be rendered without clothes
+   * Detects FULL nudity in the outfit field only.
+   * Used to determine if companion should be rendered without clothes.
+   *
+   * INTENTIONALLY NARROW — only true "fully naked" indicators.
+   * Do NOT add pose words (spread, exposed, topless) — they appear in visual_tags
+   * and would incorrectly strip clothing in outfit-filter.ts.
    */
-  EXPLICIT_KEYWORDS: /naked|nude|unclothed|topless|bottomless|pussy|hole|anus|anal|spreading|spread|asscheeks|cheek|exposed|undressing|stripping|no clothes/i,
+  EXPLICIT_KEYWORDS: /\bnaked\b|\bnude\b|\bunclothed\b|\bno clothes\b|\bno clothing\b|\bfully nude\b|\bfully naked\b|\bbare body\b/i,
 
   /**
    * Detects virtual/remote contexts (POV, selfie, camera, etc.)

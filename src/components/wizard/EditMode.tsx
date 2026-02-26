@@ -1,7 +1,8 @@
 "use client";
 
-import { Heart, Palette, Sparkles, Settings2, ChevronRight, Plus, X, Save, User } from "lucide-react";
+import { Heart, Palette, Sparkles, Settings2, ChevronRight, Plus, X, Save, User, Volume2, VolumeX } from "lucide-react";
 import { ImageIcon } from "lucide-react";
+import { RECOMMENDED_VOICES } from "@/lib/elevenlabs";
 import type { RefObject } from "react";
 import type { CompanionWizardState } from "@/types";
 import { ImageCropper } from "../image-cropper";
@@ -160,6 +161,63 @@ export function EditMode({
                 <span className="text-slate-500">Role</span>
                 <span className="text-pink-400 font-bold">{state.occupation}</span>
               </div>
+            </div>
+          </Section>
+
+          {/* Voice Settings */}
+          <Section title="Voice" icon={state.voiceEnabled ? Volume2 : VolumeX} className="p-4">
+            <div className="space-y-4">
+              {/* Voice Enable Toggle */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Enable Voice</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newEnabled = !state.voiceEnabled;
+                    update('voiceEnabled', newEnabled);
+                    if (!newEnabled) {
+                      update('voiceId', null);
+                    }
+                  }}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    state.voiceEnabled ? "bg-pink-600" : "bg-slate-600"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                      state.voiceEnabled ? "translate-x-5" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Voice Selection */}
+              {state.voiceEnabled && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Voice Style
+                  </label>
+                  <select
+                    value={state.voiceId || ""}
+                    onChange={(e) => update('voiceId', e.target.value || null)}
+                    className="w-full bg-black/40 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500"
+                  >
+                    <option value="">Select a voice...</option>
+                    {RECOMMENDED_VOICES.map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name} - {voice.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Current Voice Display */}
+              {state.voiceId && state.voiceEnabled && (
+                <div className="text-xs text-pink-400 font-medium">
+                  {RECOMMENDED_VOICES.find(v => v.id === state.voiceId)?.name || 'Custom Voice'}
+                </div>
+              )}
             </div>
           </Section>
         </div>

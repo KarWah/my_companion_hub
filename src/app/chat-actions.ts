@@ -16,11 +16,17 @@ export async function sendMessage(formData: FormData) {
   const message = formData.get("message") as string;
   const companionId = formData.get("companionId") as string;
   const shouldGenImage = formData.get("generateImage") === "on";
+  const voiceEnabled = formData.get("voiceEnabled") === "true";
+  const voiceId = formData.get("voiceId") as string | null;
+  const ragEnabled = formData.get("ragEnabled") !== "false"; // default true
+  const deepThink = formData.get("deepThink") === "true";    // default false
 
   log.info({
     companionId,
     messageLength: message?.length || 0,
     shouldGenImage,
+    voiceEnabled,
+    hasVoiceId: !!voiceId,
   }, 'Received chat message');
 
   if (!message || !companionId) {
@@ -55,7 +61,7 @@ export async function sendMessage(formData: FormData) {
   const history = await prisma.message.findMany({
     where: { companionId },
     orderBy: { createdAt: "desc" },
-    take: 10,
+    take: 30,
   });
 
   const formattedHistory = history.reverse().map((m) => ({
@@ -63,7 +69,8 @@ export async function sendMessage(formData: FormData) {
     content: m.content
   }));
 
-  const companion = await prisma.companion.findUnique({ where: { id: companionId } });
+  // Cast: currentMood added to schema — remove `as any` after `npx prisma generate`
+  const companion = await prisma.companion.findUnique({ where: { id: companionId } }) as any;
 
     // 3. Start workflow (non-blocking)
     const client = await getTemporalClient();
@@ -97,8 +104,14 @@ export async function sendMessage(formData: FormData) {
         currentOutfit: companion?.currentOutfit || "casual clothes",
         currentLocation: companion?.currentLocation || "gaming setup, bedroom",
         currentAction: companion?.currentAction || "looking at viewer",
+        currentMood: companion?.currentMood || "neutral",
         msgHistory: formattedHistory,
-        shouldGenerateImage: shouldGenImage
+        shouldGenerateImage: shouldGenImage,
+        voiceEnabled: voiceEnabled && !!voiceId,
+        voiceId: voiceId || undefined,
+        ragEnabled,
+        deepThink,
+        userMessageId: userMessage.id
       }],
     });
 
@@ -159,6 +172,7 @@ export async function finalizeMessage(workflowId: string) {
     log.info({
       textLength: result.text?.length || 0,
       hasImage: !!result.imageUrl,
+      hasAudio: !!result.audioUrl,
     }, 'Workflow result received');
 
     // Save assistant message
@@ -167,6 +181,7 @@ export async function finalizeMessage(workflowId: string) {
         role: "assistant",
         content: result.text,
         imageUrl: result.imageUrl,
+        audioUrl: result.audioUrl,
         companionId: execution.companionId,
       },
     });
@@ -178,7 +193,8 @@ export async function finalizeMessage(workflowId: string) {
         status: 'completed',
         progress: 100,
         streamedText: result.text,
-        imageUrl: result.imageUrl
+        imageUrl: result.imageUrl,
+        audioUrl: result.audioUrl
       }
     });
 

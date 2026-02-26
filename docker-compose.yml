@@ -1,9 +1,9 @@
 version: '3.5'
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database with pgvector extension
   postgres:
-    image: postgres:15
+    image: pgvector/pgvector:pg18-trixie
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -11,7 +11,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
+    # PostgreSQL 18+ uses /var/lib/postgresql (not /data) for proper pg_upgrade support
 
   # Temporal Server (We will need this later for the AI logic)
   temporal:
@@ -24,6 +25,16 @@ services:
     volumes:
       - temporal_data:/home/temporal
 
+  # Redis - real-time token streaming via pub/sub
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save ""  # Disable persistence for dev (pure in-memory)
+
 volumes:
   postgres_data:
   temporal_data:
+  redis_data:

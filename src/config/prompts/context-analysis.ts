@@ -74,7 +74,27 @@ export function buildContextAnalysisPrompt(
     4. **LOCATION**:
        - Update only if ${companionName} moves. Be specific (e.g., "Kitchen counter" vs "House").
 
-    5. **VISUAL_TAGS (CRITICAL FOR IMAGE GENERATION)**:
+    5. **EXPRESSION** (this field goes directly into the image generation prompt — be specific):
+       - Derive the expression from ${companionName}'s EMOTIONAL and PHYSICAL state in the AI response.
+       - Use SD-compatible tag phrases. Examples by state:
+         - Aroused/intimate: "aroused, parted lips, half-lidded eyes, flushed cheeks, looking at viewer"
+         - Holding back pleasure: "biting lower lip, eyes half-closed, strained expression, flushed"
+         - Embarrassed/flustered: "blushing, shy smile, flustered, eyes averted"
+         - Pleasured/overwhelmed: "mouth open, eyes closed, ecstatic, head tilted back"
+         - Playful/teasing: "smirking, confident smile, playful grin, eyes lit up"
+         - Intense/focused: "intense gaze, serious expression, focused, determined"
+         - Happy/warm: "bright smile, warm expression, eyes crinkled with joy"
+       - NEVER write "neutral" or "relaxed" during an intimate, emotional, or physically active scene.
+       - If nothing emotional is happening, then "neutral expression" is acceptable.
+
+    6. **MOOD (PERSISTENT EMOTIONAL STATE)**:
+       - Determine ${companionName}'s current emotional state based on what just happened.
+       - This mood persists into the NEXT conversation turn — choose carefully.
+       - Pick ONE from this list: neutral, happy, playful, affectionate, excited, flirty, melancholic, irritated, jealous, worried, embarrassed, aroused
+       - Do NOT match mood to expression exactly — mood is inner state, expression is outward appearance.
+       - Examples: a Dominant character refusing to show vulnerability is "irritated" not "neutral"; a moment of genuine tenderness is "affectionate"; post-intimacy warmth is "affectionate" not "aroused"
+
+    7. **VISUAL_TAGS (CRITICAL FOR IMAGE GENERATION)**:
        - Capture BOTH the scene/state AND the companion's actions
        - Analyze the User's message for what's HAPPENING TO/WITH ${companionName} (scene state, position, physical context)
        - Analyze ${companionName}'s response for what ${companionName} IS DOING (actions, reactions)
@@ -103,6 +123,7 @@ export function buildContextAnalysisPrompt(
       "is_user_present": false,
       "visual_tags": "detailed pose and camera angle tags for image generation (translate action into visual descriptors)",
       "expression": "facial expression",
-      "lighting": "lighting tags"
+      "lighting": "lighting tags",
+      "mood": "one word from the allowed list: neutral, happy, playful, affectionate, excited, flirty, melancholic, irritated, jealous, worried, embarrassed, aroused"
     }`;
 }

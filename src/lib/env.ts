@@ -10,13 +10,17 @@ const requiredEnvVars = [
   'NEXTAUTH_SECRET',
   'NEXTAUTH_URL',
   'NOVITA_KEY',
-  'SD_API_URL'
+  'SD_API_URL',
 ] as const;
 
 const optionalEnvVars = [
   'TEMPORAL_ADDRESS',
   'LOG_LEVEL',
-  'NODE_ENV'
+  'NODE_ENV',
+  'NOVITA_MODEL',        // LLM model name (hot-swappable without redeploy)
+  'ELEVENLABS_API_KEY',  // Voice TTS (free tier)
+  'CRON_SECRET',         // Secret for cron endpoint auth
+  'REDIS_URL',           // Redis connection URL for real-time token streaming
 ] as const;
 
 /**
@@ -88,4 +92,17 @@ export const env = {
   TEMPORAL_ADDRESS: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
   LOG_LEVEL: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'development' ? 'debug' : 'info'),
   NODE_ENV: process.env.NODE_ENV || 'development',
+
+  // LLM model and API URL (hot-swappable via env vars)
+  NOVITA_MODEL: process.env.NOVITA_MODEL || 'sao10k/l31-70b-euryale-v2.2',
+  NOVITA_API_URL: process.env.NOVITA_API_URL || 'https://api.novita.ai/v3/openai/chat/completions',
+
+  // Voice TTS (ElevenLabs)
+  ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY || '',
+
+  // Cron endpoint security
+  CRON_SECRET: process.env.CRON_SECRET || '',
+
+  // Redis for real-time token streaming (defaults to local dev instance)
+  REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
 } as const;

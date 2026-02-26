@@ -5,4 +5,5 @@ export { StyleStep } from './StyleStep';
 export { LookStep } from './LookStep';
 export { BodyStep } from './BodyStep';
 export { IdentityStep } from './IdentityStep';
+export { VoiceStep } from './VoiceStep';
 export { FinishStep } from './FinishStep';

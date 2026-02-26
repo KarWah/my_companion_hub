@@ -1,7 +1,8 @@
-import { Client, Connection } from '@temporalio/client';
 import prisma from '@/lib/prisma';
 import { getAuthenticatedUser } from '@/lib/auth-helpers';
 import { apiLogger } from '@/lib/logger';
+import { getTemporalClient } from '@/lib/temporal';
+import { subscribeToWorkflow } from '@/lib/redis';
 import { env } from '@/lib/env';
 
 export const runtime = 'nodejs';
@@ -25,21 +26,68 @@ export async function GET(
       return new Response('Unauthorized', { status: 403 });
     }
 
+    // `from` lets reconnecting clients resume without duplicating already-seen tokens
+    const url = new URL(request.url);
+    const fromParam = parseInt(url.searchParams.get('from') || '0', 10);
+    const resumeFrom = isNaN(fromParam) || fromParam < 0 ? 0 : fromParam;
+
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
-        const connection = await Connection.connect({ address: env.TEMPORAL_ADDRESS });
-        const client = new Client({ connection });
-
         try {
+          const client = await getTemporalClient();
           const handle = client.workflow.getHandle(workflowId);
-          let lastTextLength = 0;
 
-          // Poll every 100ms for smooth streaming (faster for token-by-token feel)
-          const pollInterval = setInterval(async () => {
+          // ── Send any text already streamed before this SSE connection opened ──
+          // Uses the `from` cursor so reconnects only get unseen characters.
+          let lastTextLength = 0;
+          const initialExecution = await prisma.workflowExecution.findUnique({
+            where: { workflowId },
+            select: { streamedText: true }
+          });
+          const existingText = initialExecution?.streamedText || '';
+          lastTextLength = existingText.length;
+          const catchUpText = existingText.slice(resumeFrom);
+          if (catchUpText) {
+            const tokenEvent = `event: token\ndata: ${JSON.stringify({ token: catchUpText })}\n\n`;
+            controller.enqueue(encoder.encode(tokenEvent));
+          }
+
+          // ── Subscribe to Redis for real-time token delivery ───────────────────
+          let unsubscribeRedis: (() => void) | null = null;
+          const useRedis = !!env.REDIS_URL;
+
+          if (useRedis) {
             try {
-              // Poll database for streaming text (updated by activity in real-time)
+              unsubscribeRedis = await subscribeToWorkflow(workflowId, (delta) => {
+                try {
+                  const tokenEvent = `event: token\ndata: ${JSON.stringify({ token: delta })}\n\n`;
+                  controller.enqueue(encoder.encode(tokenEvent));
+                } catch {
+                  // Stream already closed — ignore
+                }
+              });
+            } catch (redisErr) {
+              apiLogger.warn({ workflowId, error: redisErr }, 'Redis unavailable, falling back to DB polling for tokens');
+            }
+          }
+
+          // ── Poll for progress/completion (and token fallback without Redis) ───
+          // With Redis: 500 ms is plenty for progress updates.
+          // Without Redis: 200 ms keeps token latency acceptable.
+          const pollMs = unsubscribeRedis ? 500 : 200;
+
+          let pollInterval: ReturnType<typeof setInterval>;
+
+          function cleanup() {
+            clearInterval(pollInterval);
+            unsubscribeRedis?.();
+            try { controller.close(); } catch { /* already closed */ }
+          }
+
+          pollInterval = setInterval(async () => {
+            try {
               const dbExecution = await prisma.workflowExecution.findUnique({
                 where: { workflowId },
                 select: {
@@ -48,27 +96,28 @@ export async function GET(
                   progress: true,
                   currentStep: true,
                   imageUrl: true,
+                  audioUrl: true,
                   error: true
                 }
               });
 
               if (!dbExecution) {
-                apiLogger.error({ workflowId }, 'WorkflowExecution not found');
+                apiLogger.error({ workflowId }, 'WorkflowExecution not found during poll');
                 return;
               }
 
-              // Check for new tokens from database
-              const currentText = dbExecution.streamedText || '';
-              const newText = currentText.slice(lastTextLength);
-              if (newText) {
-                lastTextLength = currentText.length;
-
-                // Send token event
-                const tokenEvent = `event: token\ndata: ${JSON.stringify({ token: newText })}\n\n`;
-                controller.enqueue(encoder.encode(tokenEvent));
+              // DB token fallback — only used when Redis is unavailable
+              if (!unsubscribeRedis) {
+                const currentText = dbExecution.streamedText || '';
+                const newText = currentText.slice(lastTextLength);
+                if (newText) {
+                  lastTextLength = currentText.length;
+                  const tokenEvent = `event: token\ndata: ${JSON.stringify({ token: newText })}\n\n`;
+                  controller.enqueue(encoder.encode(tokenEvent));
+                }
               }
 
-              // Also query workflow for progress updates
+              // Query Temporal for progress, fall back to DB values
               let workflowProgress: {
                 status: string;
                 progress: number;
@@ -80,8 +129,7 @@ export async function GET(
                   progress: number;
                   currentStep: string;
                 };
-              } catch (queryError) {
-                // Workflow might not be ready yet, use DB status
+              } catch {
                 workflowProgress = {
                   status: dbExecution.status,
                   progress: dbExecution.progress,
@@ -97,16 +145,17 @@ export async function GET(
               })}\n\n`;
               controller.enqueue(encoder.encode(progressEvent));
 
-              // Check if complete
+              // Check for completion
               if (workflowProgress.status === 'completed' || workflowProgress.status === 'failed') {
                 clearInterval(pollInterval);
+                unsubscribeRedis?.();
 
                 try {
                   const result = await handle.result();
-
                   const completeEvent = `event: complete\ndata: ${JSON.stringify({
                     text: result.text,
                     imageUrl: result.imageUrl,
+                    audioUrl: result.audioUrl,
                     updatedState: result.updatedState
                   })}\n\n`;
                   controller.enqueue(encoder.encode(completeEvent));
@@ -119,15 +168,12 @@ export async function GET(
               }
             } catch (error) {
               apiLogger.error({ error, workflowId }, 'SSE poll error');
-              // Continue polling even if query fails temporarily
+              // Continue polling even on transient errors
             }
-          }, 100);
+          }, pollMs);
 
-          // Clean up on disconnect
-          request.signal.addEventListener('abort', () => {
-            clearInterval(pollInterval);
-            controller.close();
-          });
+          // Clean up on client disconnect
+          request.signal.addEventListener('abort', cleanup);
 
         } catch (error) {
           apiLogger.error({ error, workflowId }, 'SSE setup error');

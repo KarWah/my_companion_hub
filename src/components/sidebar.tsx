@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, Users, Settings, LogOut, Image, Sparkles } from "lucide-react";
+import { MessageSquare, Users, Settings, LogOut, Image, Sparkles, Globe } from "lucide-react";
 import clsx from "clsx";
 import { useSession, signOut } from "next-auth/react";
 
@@ -13,6 +13,7 @@ export default function Sidebar() {
   const navItems = [
     { name: "Chat", href: "/", icon: MessageSquare },
     { name: "Companions", href: "/companions", icon: Users },
+    { name: "Community", href: "/community", icon: Globe },
     { name: "Gallery", href: "/gallery", icon: Image },
     { name: "Generate", href: "/generate", icon: Sparkles },
     { name: "Settings", href: "/settings", icon: Settings },

@@ -6,14 +6,38 @@ import type { Message } from "@/types/index";
 export default async function ChatPage({
   searchParams,
 }: {
-  searchParams: { companionId?: string };
+  searchParams: Promise<{ companionId?: string }>;
 }) {
   const params = await searchParams;
   const activeId = params?.companionId;
   const companion = await getActiveCompanion(activeId);
 
   if (!companion) {
-    return <div className="text-slate-500 p-10">No companion selected.</div>;
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-10">
+        <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center mb-6">
+          <span className="text-4xl">💬</span>
+        </div>
+        <h2 className="text-xl font-bold text-white mb-2">No companion selected</h2>
+        <p className="text-slate-400 mb-8 max-w-sm">
+          Choose an existing companion or create a new one to start chatting.
+        </p>
+        <div className="flex gap-3">
+          <a
+            href="/companions"
+            className="px-5 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white rounded-lg font-medium transition-all"
+          >
+            My Companions
+          </a>
+          <a
+            href="/companions/new"
+            className="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+          >
+            Create New
+          </a>
+        </div>
+      </div>
+    );
   }
 
   // Optimized: Load only the most recent 100 messages
@@ -25,7 +49,11 @@ export default async function ChatPage({
   });
 
   // Reverse to display oldest-first (chronological order)
-  const messages = recentMessages.reverse();
+  // Cast role: Prisma returns string, but DB only ever contains "user" | "assistant"
+  const messages = recentMessages.reverse().map(m => ({
+    ...m,
+    role: m.role as Message["role"],
+  }));
 
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto">
@@ -76,6 +104,8 @@ export default async function ChatPage({
         initialMessages={messages}
         companionId={companion.id}
         companionName={companion.name}
+        companionVoiceEnabled={companion.voiceEnabled}
+        companionVoiceId={companion.voiceId}
       />
     </div>
   );

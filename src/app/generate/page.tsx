@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { generateImage } from "@/app/image-actions";
 import { Copy, Download } from "lucide-react";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -33,6 +33,7 @@ export default function GeneratePage() {
   const [generating, setGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -65,17 +66,22 @@ export default function GeneratePage() {
     }
   };
 
-  const copyImageToClipboard = async () => {
+  const copyImageToClipboard = useCallback(async () => {
     if (!generatedImage) return;
 
     try {
-      // For base64 images, we can't directly copy to clipboard easily
-      // Instead, we'll show a message that they can right-click and copy
-      alert("Right-click on the image and select 'Copy Image' to copy it to your clipboard, or use the Download button to save it.");
+      const response = await fetch(generatedImage);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("Copy failed:", err);
+      setError("Clipboard copy failed — use the Download button or right-click the image.");
     }
-  };
+  }, [generatedImage]);
 
   const downloadImage = () => {
     if (!generatedImage) return;
@@ -280,9 +286,9 @@ export default function GeneratePage() {
                 <button
                   onClick={copyImageToClipboard}
                   className="p-2 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg transition-colors"
-                  title="Copy Image"
+                  title={copied ? "Copied!" : "Copy Image"}
                 >
-                  <Copy size={20} />
+                  {copied ? <span className="text-xs px-1 text-green-400">Copied!</span> : <Copy size={20} />}
                 </button>
                 <button
                   onClick={downloadImage}
@@ -314,7 +320,7 @@ export default function GeneratePage() {
 
           {generatedImage && (
             <p className="text-xs text-slate-500 mt-4 text-center">
-              Right-click and "Copy Image" to use as companion header
+              Use Copy or Download to save the image
             </p>
           )}
         </div>

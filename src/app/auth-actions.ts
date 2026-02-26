@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { checkRegistrationRateLimit, getClientIp } from "@/lib/rate-limit-db";
 import { authLogger } from "@/lib/logger";
+import { validatePasswordComplexity } from "@/lib/validation";
+import { logAuthEvent } from "@/lib/audit-logger";
 import type { ActionResult } from "@/types";
 
 export async function registerUser(formData: FormData): Promise<ActionResult> {
@@ -28,8 +30,10 @@ export async function registerUser(formData: FormData): Promise<ActionResult> {
     return { success: false, error: "All fields are required" };
   }
 
-  if (password.length < 8) {
-    return { success: false, error: "Password must be at least 8 characters" };
+  // Password complexity validation
+  const passwordValidation = validatePasswordComplexity(password);
+  if (!passwordValidation.valid) {
+    return { success: false, error: passwordValidation.errors[0] };
   }
 
   try {
@@ -54,7 +58,7 @@ export async function registerUser(formData: FormData): Promise<ActionResult> {
     // Create user
     const hashedPassword = await hashPassword(password);
 
-    await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         email,
         username, // Already normalized to lowercase
@@ -62,6 +66,9 @@ export async function registerUser(formData: FormData): Promise<ActionResult> {
         hashedPassword
       }
     });
+
+    // Audit log
+    await logAuthEvent("register", user.id, { email, username });
   } catch (error) {
     authLogger.error({ error, username }, "Registration error");
     return { success: false, error: "An unexpected error occurred. Please try again." };

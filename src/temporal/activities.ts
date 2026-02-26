@@ -19,6 +19,10 @@ import prisma from '@/lib/prisma';
 import { analyzeConversationContext } from './activities/context-analyzer';
 import { generateLLMResponse as generateResponse } from './activities/llm-generator';
 import { generateCompanionImage as generateImage } from './activities/image-generator';
+import { generateSDPrompt as generateSDPromptActivity, type SDPromptResult } from './activities/sd-prompt-generator';
+import { extractAndStoreMemories } from './activities/memory-extractor';
+import { retrieveRelevantMemories } from './activities/memory-retriever';
+import { generateVoiceAudio as generateVoice } from './activities/voice-generator';
 
 /**
  * Analyzes conversation context to extract visual state for image generation
@@ -64,7 +68,9 @@ export async function generateLLMResponse(
   currentContext: { outfit: string; location: string; action: string },
   isUserPresent: boolean,
   userName: string,
-  workflowId?: string
+  memories: string[],
+  workflowId?: string,
+  deepThink?: boolean,
 ): Promise<string> {
   return await generateResponse(
     companionId,
@@ -73,54 +79,130 @@ export async function generateLLMResponse(
     currentContext,
     isUserPresent,
     userName,
-    workflowId
+    memories,
+    workflowId,
+    deepThink,
   );
 }
 
 /**
- * Generates an image of the companion using Stable Diffusion
+ * Generates a complete Stable Diffusion prompt using a dedicated LLM.
  *
- * Delegates to image-generator module for focused implementation.
- * Includes automatic checkpoint selection based on companion.style.
+ * Receives all scene context (outfit, location, action, conversation history,
+ * companion appearance) and outputs a properly weighted, ordered SD prompt
+ * with correct character identity anchoring and action-to-pose translation.
+ *
+ * @see {import('./activities/sd-prompt-generator').generateSDPrompt}
+ */
+export async function generateSDPrompt(
+  companionId: string,
+  outfit: string,
+  location: string,
+  action: string,
+  visualTags: string,
+  expression: string,
+  lighting: string,
+  isUserPresent: boolean,
+  userMessage: string,
+  aiResponse: string,
+  recentHistory: MessageHistory[],
+  companionName: string,
+  userName: string,
+): Promise<SDPromptResult> {
+  return await generateSDPromptActivity(
+    companionId,
+    outfit,
+    location,
+    action,
+    visualTags,
+    expression,
+    lighting,
+    isUserPresent,
+    userMessage,
+    aiResponse,
+    recentHistory,
+    companionName,
+    userName,
+  );
+}
+
+/**
+ * Generates an image of the companion using Stable Diffusion.
+ *
+ * Accepts a pre-built SD prompt (positive + negative) produced by generateSDPrompt.
+ * The image-generator activity is now a thin wrapper around the SD API call.
  *
  * @see {import('./activities/image-generator').generateCompanionImage}
  */
 export async function generateCompanionImage(
   companionId: string,
-  visualState: string,
-  location: string,
-  visualTags: string,
-  expression: string,
-  isUserPresent: boolean,
-  lighting: string,
+  positive: string,
+  negative: string,
+  cfg_scale: number,
+  steps: number,
 ): Promise<string> {
   return await generateImage(
     companionId,
-    visualState,
-    location,
-    visualTags,
-    expression,
-    isUserPresent,
-    lighting
+    positive,
+    negative,
+    cfg_scale,
+    steps,
   );
 }
 
 /**
- * Updates the companion's persistent context state in the database
+ * Extracts and stores memories from a conversation
  *
- * This function is already small and focused, so it remains in this file.
- * Updates outfit, location, and action for the companion.
+ * Delegates to memory-extractor module for focused implementation.
+ *
+ * @see {import('./activities/memory-extractor').extractAndStoreMemories}
+ */
+export { extractAndStoreMemories };
+
+/**
+ * Retrieves relevant memories for a given user message
+ *
+ * Delegates to memory-retriever module for focused implementation.
+ *
+ * @see {import('./activities/memory-retriever').retrieveRelevantMemories}
+ */
+export { retrieveRelevantMemories };
+
+/**
+ * Generates voice audio for a companion message using ElevenLabs TTS
+ *
+ * Delegates to voice-generator module for focused implementation.
+ *
+ * @see {import('./activities/voice-generator').generateVoiceAudio}
+ */
+export async function generateVoiceAudio(
+  companionId: string,
+  voiceId: string,
+  text: string
+): Promise<{ audioUrl: string | null; error?: string }> {
+  return await generateVoice({
+    companionId,
+    voiceId,
+    text,
+  });
+}
+
+/**
+ * Updates the companion's persistent context state in the database.
+ * Saves outfit, location, action, and mood after each conversation turn.
  *
  * @param companionId - ID of the companion to update
  * @param outfit - New outfit state
  * @param location - New location state
  * @param action - New action state
+ * @param mood - New emotional state
  */
 export async function updateCompanionContext(
   companionId: string,
   outfit: string,
   location: string,
-  action: string
+  action: string,
+  mood: string
 ) {
   const log = workflowLogger.child({
     activity: 'updateCompanionContext',
@@ -133,14 +215,16 @@ export async function updateCompanionContext(
       data: {
         currentOutfit: outfit,
         currentLocation: location,
-        currentAction: action
-      }
+        currentAction: action,
+        currentMood: mood,
+      } as any // currentMood added to schema — remove cast after `prisma generate`
     });
 
     log.info({
       outfit,
       location,
       action,
+      mood,
     }, 'Companion context updated');
 
   } catch (e) {

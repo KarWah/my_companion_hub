@@ -41,3 +41,10 @@ next-env.d.ts
 
 # uploads (user-generated images - don't commit to git!)
 /public/uploads/
+
+# database backups - never commit these
+database_backup_*.sql
+*.sql.gz
+
+# claude tool artifacts
+tmpclaude-*

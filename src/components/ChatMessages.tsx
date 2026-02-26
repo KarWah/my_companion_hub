@@ -1,21 +1,25 @@
 "use client";
 
 import type { Message, StreamState } from "@/types";
+import { AudioPlayer } from "./AudioPlayer";
 
 export function ChatMessages({
   initialMessages,
   companionId,
+  companionName,
   streamState,
   optimisticMessage
 }: {
   initialMessages: Message[];
   companionId: string;
+  companionName: string;
   streamState?: StreamState;
   optimisticMessage?: string | null;
 }) {
   const isStreaming = streamState && !streamState.isComplete;
   const streamingText = streamState?.streamedText || '';
   const streamingImageUrl = streamState?.imageUrl || null;
+  const streamingAudioUrl = streamState?.audioUrl || null;
 
   // Check if the optimistic message already exists in the real messages
   const lastMessage = initialMessages[initialMessages.length - 1];
@@ -33,10 +37,14 @@ export function ChatMessages({
                 : "bg-gradient-to-br from-slate-800/90 to-purple-950/30 shadow-md text-slate-200 rounded-tl-sm"
             }`}>
               {msg.content}
+              {/* Audio player for assistant messages with voice */}
+              {msg.role === "assistant" && msg.audioUrl && (
+                <AudioPlayer src={msg.audioUrl} compact />
+              )}
             </div>
             {msg.imageUrl && (
               <div className="rounded-xl overflow-hidden border border-slate-700">
-                <img src={msg.imageUrl} alt="Generated" className="w-full h-auto" />
+                <img src={msg.imageUrl} alt={`${companionName} generated image`} className="w-full h-auto" loading="lazy" />
               </div>
             )}
           </div>
@@ -61,11 +69,15 @@ export function ChatMessages({
             <div className="p-4 rounded-3xl bg-gradient-to-br from-slate-800/90 to-purple-950/30 shadow-md text-slate-200 rounded-tl-sm">
               {streamingText}
               <span className="inline-block w-1 h-4 ml-1 bg-pink-400 animate-pulse" />
+              {/* Audio player when voice is ready during streaming */}
+              {streamingAudioUrl && (
+                <AudioPlayer src={streamingAudioUrl} compact />
+              )}
             </div>
             {/* Show image placeholder or loading state */}
             {streamingImageUrl && (
               <div className="rounded-xl overflow-hidden border border-slate-700">
-                <img src={streamingImageUrl} alt="Generated" className="w-full h-auto" />
+                <img src={streamingImageUrl} alt={`${companionName} generated image`} className="w-full h-auto" />
               </div>
             )}
           </div>

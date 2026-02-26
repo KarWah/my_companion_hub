@@ -1,6 +1,6 @@
 "use client";
 
-import { Send, Image as ImageIcon } from "lucide-react";
+import { Send, Image as ImageIcon, Volume2, VolumeX } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { sendMessage, finalizeMessage } from "@/app/chat-actions";
 import { useState, useEffect, useTransition, useRef } from "react";
@@ -28,20 +28,49 @@ function SubmitButton() {
 export function ChatForm({
   companionId,
   companionName,
+  companionVoiceEnabled = false,
+  companionVoiceId,
   onStreamUpdate,
   onMessageSent,
-  onWorkflowComplete
+  onWorkflowComplete,
+  onMessageFailed
 }: {
   companionId: string;
   companionName: string;
+  companionVoiceEnabled?: boolean;
+  companionVoiceId?: string | null;
   onStreamUpdate?: (state: StreamState) => void;
   onMessageSent?: (message: string) => void;
   onWorkflowComplete?: () => void;
+  onMessageFailed?: () => void;
 }) {
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const streamState = useWorkflowStream(workflowId);
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  // Voice toggle - persisted per companion in localStorage
+  const [voiceEnabled, setVoiceEnabled] = useState(companionVoiceEnabled);
+  // Global AI settings - persisted in localStorage, configured in /settings
+  const [ragEnabled, setRagEnabled] = useState(true);
+  const [deepThink, setDeepThink] = useState(false);
+
+  // On mount (or companion change), load persisted preferences from localStorage.
+  useEffect(() => {
+    const storedVoice = localStorage.getItem(`voice-${companionId}`);
+    setVoiceEnabled(storedVoice !== null ? storedVoice === 'true' : companionVoiceEnabled);
+
+    const storedRag = localStorage.getItem('rag-enabled');
+    const storedDeepThink = localStorage.getItem('deep-think-enabled');
+    if (storedRag !== null) setRagEnabled(storedRag === 'true');
+    if (storedDeepThink !== null) setDeepThink(storedDeepThink === 'true');
+  }, [companionId, companionVoiceEnabled]);
+
+  const handleVoiceToggle = () => {
+    const next = !voiceEnabled;
+    setVoiceEnabled(next);
+    localStorage.setItem(`voice-${companionId}`, String(next));
+  };
 
   // Forward stream updates to parent
   useEffect(() => {
@@ -68,6 +97,7 @@ export function ChatForm({
 
   async function handleSubmit(formData: FormData) {
     const message = formData.get("message") as string;
+    setSendError(null);
 
     // Show optimistic message immediately
     if (message && onMessageSent) {
@@ -78,7 +108,10 @@ export function ChatForm({
     if (result?.success && result.workflowId) {
       setWorkflowId(result.workflowId);
     } else if (result?.error) {
-      alert(result.error);
+      setSendError(result.error);
+      if (onMessageFailed) {
+        onMessageFailed();
+      }
     }
   }
 
@@ -90,6 +123,28 @@ export function ChatForm({
         className="flex gap-2 items-center bg-slate-800/50 p-2 rounded-2xl border border-slate-700 focus-within:border-pink-500 focus-within:shadow-glow-pink transition-all"
       >
         <input type="hidden" name="companionId" value={companionId} />
+        <input type="hidden" name="voiceEnabled" value={voiceEnabled ? "true" : "false"} />
+        <input type="hidden" name="ragEnabled" value={ragEnabled ? "true" : "false"} />
+        <input type="hidden" name="deepThink" value={deepThink ? "true" : "false"} />
+        {companionVoiceId && <input type="hidden" name="voiceId" value={companionVoiceId} />}
+
+        {/* Voice toggle - only show if companion has voice configured */}
+        {companionVoiceId && (
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={handleVoiceToggle}
+              className={`p-2 transition-colors ${
+                voiceEnabled ? "text-pink-400" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            </button>
+            <span className="absolute -top-8 left-0 text-xs bg-black text-white p-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap">
+              {voiceEnabled ? "Voice on" : "Voice off"}
+            </span>
+          </div>
+        )}
 
         <div className="relative group">
           <input type="checkbox" name="generateImage" id="genImg" className="peer sr-only" />
@@ -113,25 +168,9 @@ export function ChatForm({
         <SubmitButton />
       </form>
 
-      {/* Progress UI */}
-      {workflowId && !streamState.isComplete && (
-        <div className="mt-2 p-3 bg-slate-800/80 rounded-lg space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-300">{streamState.currentStep}</span>
-            <span className="text-xs text-slate-400">{streamState.progress}%</span>
-          </div>
-          <div className="w-full bg-slate-700 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${streamState.progress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {streamState.error && (
+      {(sendError || streamState.error) && (
         <div className="mt-2 p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-300 text-sm">
-          Error: {streamState.error}
+          {sendError || `Error: ${streamState.error}`}
         </div>
       )}
     </div>

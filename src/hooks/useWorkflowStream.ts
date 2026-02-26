@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { StreamState, WorkflowResult } from '@/types';
 
 export function useWorkflowStream(workflowId: string | null): StreamState {
@@ -11,6 +11,13 @@ export function useWorkflowStream(workflowId: string | null): StreamState {
     streamedText: '',
     isComplete: false
   });
+
+  // Track last status change for debouncing
+  const [lastStatusChangeTime, setLastStatusChangeTime] = useState(Date.now());
+  const MIN_STATUS_DISPLAY_TIME = 300; // ms
+
+  // Ref to track completion without stale closure issues in onerror
+  const isCompleteRef = useRef(false);
 
   useEffect(() => {
     if (!workflowId) {
@@ -26,6 +33,7 @@ export function useWorkflowStream(workflowId: string | null): StreamState {
     }
 
     // Reset state when new workflow starts
+    isCompleteRef.current = false;
     setState({
       status: 'started',
       progress: 0,
@@ -37,49 +45,59 @@ export function useWorkflowStream(workflowId: string | null): StreamState {
     let eventSource: EventSource | null = null;
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 5;
+    // Track received character count so reconnects can resume without duplication
+    let receivedLength = 0;
 
     const connect = () => {
-      eventSource = new EventSource(`/api/chat/stream/${workflowId}`);
+      const url = `/api/chat/stream/${workflowId}?from=${receivedLength}`;
+      eventSource = new EventSource(url);
 
       eventSource.addEventListener('token', (e) => {
         const { token } = JSON.parse(e.data);
-
-        setState(prev => {
-          const newText = prev.streamedText + token;
-
-          // Apply same cleanup as the activity to prevent text from changing
-          let cleanedText = newText;
-          // Remove asterisk actions like *giggles*
-          cleanedText = cleanedText.replace(/\s*\*[^*]+\*\s*/g, " ");
-          // Remove parenthetical actions like (giggles)
-          cleanedText = cleanedText.replace(/\s*\([a-z\s]+\)\s*/gi, " ");
-          // Clean up whitespace
-          cleanedText = cleanedText.replace(/\s+/g, " ");
-
-          return {
-            ...prev,
-            streamedText: cleanedText
-          };
-        });
+        receivedLength += token.length;
+        setState(prev => ({
+          ...prev,
+          streamedText: prev.streamedText + token
+        }));
       });
 
       eventSource.addEventListener('progress', (e) => {
         const data = JSON.parse(e.data);
-        setState(prev => ({
-          ...prev,
-          status: data.status,
-          progress: data.progress,
-          currentStep: data.currentStep
-        }));
+        const now = Date.now();
+
+        setState(prev => {
+          // Only update status text if enough time has passed OR progress increased significantly
+          const timeSinceLastChange = now - lastStatusChangeTime;
+          const shouldUpdateStatus = timeSinceLastChange > MIN_STATUS_DISPLAY_TIME ||
+                                     data.progress > prev.progress + 10;
+
+          if (shouldUpdateStatus) {
+            setLastStatusChangeTime(now);
+            return {
+              ...prev,
+              status: data.status,
+              progress: data.progress,
+              currentStep: data.currentStep
+            };
+          } else {
+            // Update progress but keep current status text
+            return {
+              ...prev,
+              progress: data.progress
+            };
+          }
+        });
       });
 
       eventSource.addEventListener('complete', (e) => {
         const result = JSON.parse(e.data);
+        isCompleteRef.current = true;
         setState(prev => ({
           ...prev,
           isComplete: true,
           finalResult: result,
-          imageUrl: result.imageUrl
+          imageUrl: result.imageUrl,
+          audioUrl: result.audioUrl
         }));
         eventSource?.close();
       });
@@ -108,7 +126,7 @@ export function useWorkflowStream(workflowId: string | null): StreamState {
         eventSource?.close();
 
         // Retry with exponential backoff if not complete
-        if (!state.isComplete && reconnectAttempts < maxReconnectAttempts) {
+        if (!isCompleteRef.current && reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
           console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);

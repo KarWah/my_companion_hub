@@ -22,10 +22,11 @@ export function filterOutfitForLayering(
   visualTags: string,
   location: string
 ): { filteredOutfit: string; isNude: boolean } {
-  // Detect if this is an explicit/nude context
-  const isNude = CONTENT_PATTERNS.EXPLICIT_KEYWORDS.test(
-    outfit + ' ' + visualTags + ' ' + location
-  );
+  // Detect full nudity by checking ONLY the outfit string.
+  // visualTags and location routinely contain pose words like "legs spread", "exposed midriff",
+  // "spread eagle" that would falsely trigger isNude if included here, causing the outfit
+  // to be stripped even when the companion is still wearing something (e.g. panties).
+  const isNude = CONTENT_PATTERNS.EXPLICIT_KEYWORDS.test(outfit);
 
   // If nude context, don't include any outfit (return empty string)
   if (isNude) {

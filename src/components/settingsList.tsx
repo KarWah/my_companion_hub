@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { wipeCompanionMemory } from "@/app/actions";
-import { Trash2, AlertTriangle, Check } from "lucide-react";
+import { Trash2, AlertTriangle } from "lucide-react";
 
 type Companion = {
   id: string;
@@ -12,6 +12,26 @@ type Companion = {
 export default function SettingsList({ companions }: { companions: Companion[] }) {
   const [ragEnabled, setRagEnabled] = useState(true);
   const [deepThink, setDeepThink] = useState(false);
+
+  // Load persisted settings from localStorage on mount
+  useEffect(() => {
+    const storedRag = localStorage.getItem('rag-enabled');
+    const storedDeepThink = localStorage.getItem('deep-think-enabled');
+    if (storedRag !== null) setRagEnabled(storedRag === 'true');
+    if (storedDeepThink !== null) setDeepThink(storedDeepThink === 'true');
+  }, []);
+
+  const handleRagToggle = () => {
+    const next = !ragEnabled;
+    setRagEnabled(next);
+    localStorage.setItem('rag-enabled', String(next));
+  };
+
+  const handleDeepThinkToggle = () => {
+    const next = !deepThink;
+    setDeepThink(next);
+    localStorage.setItem('deep-think-enabled', String(next));
+  };
 
   const [wipingId, setWipingId] = useState<string | null>(null);
 
@@ -34,7 +54,7 @@ export default function SettingsList({ companions }: { companions: Companion[] }
             <p className="text-slate-400 text-sm">Allow companions to recall past conversations.</p>
           </div>
           <button
-            onClick={() => setRagEnabled(!ragEnabled)}
+            onClick={handleRagToggle}
             className={`w-14 h-8 rounded-full transition-colors relative ${
               ragEnabled ? "bg-blue-600" : "bg-slate-700"
             }`}
@@ -48,7 +68,7 @@ export default function SettingsList({ companions }: { companions: Companion[] }
             <p className="text-slate-400 text-sm">Uses extra tokens for complex reasoning.</p>
           </div>
           <button
-            onClick={() => setDeepThink(!deepThink)}
+            onClick={handleDeepThinkToggle}
             className={`w-14 h-8 rounded-full transition-colors relative ${
               deepThink ? "bg-blue-600" : "bg-slate-700"
             }`}

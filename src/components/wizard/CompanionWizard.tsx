@@ -1,23 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Sparkles, Palette, User, Heart, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Palette, User, Heart, Upload, X, Volume2 } from "lucide-react";
 import { INITIAL_WIZARD_STATE } from "@/types";
 import { compileCompanionProfile } from "@/lib/prompt-compiler";
 import { ImageCropper } from "../image-cropper";
 import { useWizardState, useImageUpload } from "./hooks";
 import { EditMode } from "./EditMode";
-import { StyleStep, LookStep, BodyStep, IdentityStep, FinishStep } from "./steps";
+import { StyleStep, LookStep, BodyStep, IdentityStep, VoiceStep, FinishStep } from "./steps";
 import type { CompanionWizardProps } from "./types";
 
-const MAX_STEPS = 5;
+const MAX_STEPS = 6;
 
 const STEPS = [
   { id: 1, title: "Style", icon: Palette },
   { id: 2, title: "Look", icon: User },
   { id: 3, title: "Body", icon: Sparkles },
   { id: 4, title: "Identity", icon: Heart },
-  { id: 5, title: "Finish", icon: Upload },
+  { id: 5, title: "Voice", icon: Volume2 },
+  { id: 6, title: "Finish", icon: Upload },
 ];
 
 export function CompanionWizard({
@@ -214,6 +215,15 @@ export function CompanionWizard({
         )}
 
         {step === 5 && (
+          <VoiceStep
+            voiceId={wizardState.state.voiceId}
+            voiceEnabled={wizardState.state.voiceEnabled}
+            onVoiceIdChange={(voiceId: string | null) => wizardState.update('voiceId', voiceId)}
+            onVoiceEnabledChange={(enabled: boolean) => wizardState.update('voiceEnabled', enabled)}
+          />
+        )}
+
+        {step === 6 && (
           <FinishStep
             imagePreview={imageUpload.imagePreview}
             fileInputRef={imageUpload.fileInputRef}

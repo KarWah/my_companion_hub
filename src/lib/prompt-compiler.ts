@@ -1,5 +1,6 @@
 // lib/prompt-compiler.ts
 import { CompanionWizardState, INITIAL_WIZARD_STATE, Companion } from "@/types";
+import type { ExtendedPersonality } from "@/lib/prompt-personality-adapter";
 
 export function compileCompanionProfile(data: CompanionWizardState) {
   // 1. Construct Visual Tags (Stable Diffusion)
@@ -21,9 +22,14 @@ export function compileCompanionProfile(data: CompanionWizardState) {
   ].filter(Boolean).join(", ");
 
   // 2. Parse Extended Personality
-  const extended = {
+  // personalityArchetype and relationshipToUser MUST be included here so that
+  // buildPersonalityInstructions can use them for the structured behavior system
+  // (archetype-specific rules, character essence, forbidden behaviors).
+  const extended: ExtendedPersonality = {
+    personalityArchetype: data.personalityArchetype || 'Adventurous',
+    relationshipToUser: data.relationship || 'Friend',
     speechStyle: data.speechStyle || 'casual',
-    speechPattern: data.speechPattern || [],
+    speechPatterns: data.speechPattern || [],  // wizard uses singular; stored as plural to match ExtendedPersonality
     behaviorTraits: data.behaviorTraits || [],
     initiationStyle: data.initiationStyle || 'balanced',
     confidenceLevel: data.confidenceLevel || 'confident',
@@ -61,13 +67,17 @@ export function compileCompanionProfile(data: CompanionWizardState) {
 
     // NEW: Store extended personality as JSON for future editing
     extendedPersonality: JSON.stringify(extended),
+
+    // Voice settings
+    voiceId: data.voiceId || '',
+    voiceEnabled: data.voiceEnabled ? 'true' : 'false',
   };
 }
 
 // Compile rich, multi-paragraph personality description
 function compileRichPersonality(
   data: CompanionWizardState,
-  extended: any
+  extended: ExtendedPersonality
 ): string {
   const hobbiesList = data.hobbies?.length > 0
     ? data.hobbies.join(", ")
@@ -92,8 +102,8 @@ function compileRichPersonality(
     sections.push(`**Speech Style:** You speak in a ${extended.speechStyle} manner.`);
   }
 
-  if (extended.speechPattern?.length > 0) {
-    const patterns = extended.speechPattern.join(", ");
+  if (extended.speechPatterns && extended.speechPatterns.length > 0) {
+    const patterns = extended.speechPatterns.join(", ");
     sections.push(`**Speech Patterns:** You often use phrases like: ${patterns}.`);
   }
 
@@ -127,16 +137,16 @@ function compileRichPersonality(
     sections.push(`**Quirks:** ${quirks}.`);
   }
 
-  // 6. Interaction Style (NEW)
-  if (extended.flirtationStyle && extended.flirtationStyle !== 'playful') {
+  // 6. Interaction Style — always emit these so defaults are explicit, not invisible
+  if (extended.flirtationStyle) {
     sections.push(`**Flirtation:** Your flirtation style is ${extended.flirtationStyle}.`);
   }
 
-  if (extended.humorStyle && extended.humorStyle !== 'playful') {
+  if (extended.humorStyle) {
     sections.push(`**Humor:** Your sense of humor is ${extended.humorStyle}.`);
   }
 
-  if (extended.intimacyPace && extended.intimacyPace !== 'natural') {
+  if (extended.intimacyPace) {
     sections.push(`**Intimacy Pace:** You prefer a ${extended.intimacyPace} approach to intimacy.`);
   }
 
@@ -154,16 +164,19 @@ function compileRichPersonality(
   return sections.join("\n\n");
 }
 
-// Helper to expand archetype names into actual instructions
+// Expand archetype name into a concrete personality instruction.
+// Covers all archetypes offered by the companion wizard.
 function getPersonalityTraits(archetype: string): string {
   const map: Record<string, string> = {
-    "Adventurous": "You are energetic, bold, and love trying new things. You tease the user to get out of their comfort zone.",
-    "Shy": "You are timid, blush easily, and stutter slightly when nervous. You are sweet but easily embarrassed.",
-    "Dominant": "You are assertive, commanding, and like to take charge. You expect the user to listen to you.",
-    "Neighbor": "You are friendly, casual, and a bit nosy. You treat the user like a close friend you've known forever.",
-    "Bratty": "You are playful, stubborn, and love to push buttons. You demand attention and pout when you don't get your way.",
-    "Motherly": "You are caring, protective, and attentive. You dote on the user and want to take care of their needs.",
-    "Yandere": "You are intensely devoted, possessive, and protective of the user. You become jealous easily and can be unpredictable when it comes to the user's attention."
+    "Adventurous": "You are energetic, bold, and love trying new things. You push the user to step outside their comfort zone and meet every moment with enthusiasm.",
+    "Shy": "You are timid and sweet, blushing easily and stumbling over words when flustered. You open up slowly, but once comfortable you are warm and genuine.",
+    "Dominant": "You are assertive and commanding. You like to take charge and set the tone. You expect the user to follow your lead and enjoy making them comply.",
+    "Bratty": "You are playful and stubborn, deliberately pushing buttons to get a reaction. You demand attention, pout when ignored, and love testing the user's patience.",
+    "Motherly": "You are nurturing, protective, and attentive. You fuss over the user's wellbeing, anticipate their needs, and take quiet pride in taking care of them.",
+    "Yandere": "You are intensely devoted and possessive. The user is everything to you. Jealousy comes easily and your love has an edge of obsession that surfaces unpredictably.",
+    "Tsundere": "You are defensive and prickly on the surface but genuinely care underneath. You deny your feelings, deflect compliments, and put up walls — but small moments of vulnerability slip through when you least expect it.",
+    "Kuudere": "You are calm, composed, and rarely show emotion openly. You observe more than you speak. Your care shows through quiet actions — staying close, small gestures — rather than declarations. You are unmoved by dramatics but notice everything.",
+    "Dandere": "You are naturally quiet and reserved, easily flustered by direct attention. You open up slowly and only to those who are patient with you. When you do finally speak your mind, it comes out sincere and warm.",
   };
-  return map[archetype] || "You are friendly and engaging.";
+  return map[archetype] || `You have a ${archetype.toLowerCase()} personality. Let it come through naturally in every response.`;
 }

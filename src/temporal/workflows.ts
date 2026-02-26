@@ -2,19 +2,44 @@ import type { WorkflowProgress, ChatWorkflowArgs, WorkflowResult } from '@/types
 import { proxyActivities, defineQuery, defineSignal, setHandler, workflowInfo } from '@temporalio/workflow';
 import type * as activities from './activities';
 
-const {
-  generateLLMResponse,
-  analyzeContext,
-  generateCompanionImage,
-  updateCompanionContext
-} = proxyActivities<typeof activities>({
+const { analyzeContext } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '60 seconds',
+  retry: { maximumAttempts: 3, initialInterval: '1s', backoffCoefficient: 2, maximumInterval: '10s' },
+});
+
+const { generateLLMResponse } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '3 minutes',
+  retry: { maximumAttempts: 2, initialInterval: '2s', backoffCoefficient: 2, maximumInterval: '10s' },
+});
+
+const { generateSDPrompt } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '60 seconds',
+  retry: { maximumAttempts: 2, initialInterval: '2s', backoffCoefficient: 2, maximumInterval: '10s' },
+});
+
+const { generateCompanionImage } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '4 minutes',
+  retry: { maximumAttempts: 2, initialInterval: '5s', backoffCoefficient: 2, maximumInterval: '30s' },
+});
+
+const { generateVoiceAudio } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '60 seconds',
+  retry: { maximumAttempts: 2, initialInterval: '2s', backoffCoefficient: 2, maximumInterval: '10s' },
+});
+
+const { updateCompanionContext } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '30 seconds',
+  retry: { maximumAttempts: 3, initialInterval: '1s', backoffCoefficient: 2, maximumInterval: '10s' },
+});
+
+const { retrieveRelevantMemories } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '30 seconds',
+  retry: { maximumAttempts: 2, initialInterval: '1s', backoffCoefficient: 2, maximumInterval: '5s' },
+});
+
+const { extractAndStoreMemories } = proxyActivities<typeof activities>({
   startToCloseTimeout: '2 minutes',
-  retry: {
-    maximumAttempts: 3,
-    initialInterval: '1s',
-    backoffCoefficient: 2,
-    maximumInterval: '10s',
-  },
+  retry: { maximumAttempts: 1 }, // Don't retry — memory extraction failure is non-critical
 });
 
 
@@ -29,8 +54,14 @@ export async function ChatWorkflow({
   currentOutfit,
   currentLocation,
   currentAction,
+  currentMood = 'neutral',
   msgHistory,
-  shouldGenerateImage
+  shouldGenerateImage,
+  voiceEnabled = false,
+  voiceId,
+  ragEnabled = true,
+  deepThink = false,
+  userMessageId,
 }: ChatWorkflowArgs) {
 
   // Get workflow ID for streaming
@@ -84,6 +115,13 @@ export async function ChatWorkflow({
     currentStep: `${companionName} is thinking...`
   });
 
+  // Retrieve memories if RAG is enabled (degrades gracefully without embeddings)
+  let memories: string[] = [];
+  if (ragEnabled) {
+    const memResult = await retrieveRelevantMemories(companionId, userMessage);
+    memories = memResult.memories.map(m => m.content);
+  }
+
   const reply = await generateLLMResponse(
     companionId,
     userMessage,
@@ -91,7 +129,9 @@ export async function ChatWorkflow({
     initialContext,
     initialContext.isUserPresent,
     userName,
-    wfId
+    memories,
+    wfId,
+    deepThink,
   );
 
   updateProgress({
@@ -99,7 +139,21 @@ export async function ChatWorkflow({
     streamedText: reply
   });
 
-  // Step 3: Re-analyze (70-80%)
+  // Start memory extraction concurrently — runs in parallel with re-analysis and image/voice.
+  // Non-critical: failure is swallowed in the activity, so this never blocks the response.
+  const memoryExtractionPromise = ragEnabled
+    ? extractAndStoreMemories(
+        companionId,
+        companionName,
+        userName,
+        userMessage,
+        reply,
+        msgHistory.slice(-4),
+        userMessageId ?? 'unknown',
+      )
+    : Promise.resolve();
+
+  // Step 3: Re-analyze context (70-80%)
   updateProgress({
     status: 'analyzing',
     progress: 70,
@@ -129,7 +183,8 @@ export async function ChatWorkflow({
   const anyContextChanged =
     finalContext.outfit !== currentOutfit ||
     finalContext.location !== currentLocation ||
-    finalContext.action !== currentAction;
+    finalContext.action !== currentAction ||
+    finalContext.mood !== currentMood;
 
   if (anyContextChanged) {
     updateProgress({ currentStep: 'Saving context...' });
@@ -137,44 +192,91 @@ export async function ChatWorkflow({
       companionId,
       finalContext.outfit,
       finalContext.location,
-      finalContext.action
+      finalContext.action,
+      finalContext.mood,
     );
   }
 
   updateProgress({ progress: 85 });
 
-  // Step 5: Generate image (85-100%)
+  // Step 5: Generate voice audio (85-90%)
+  let audioUrl: string | null = null;
+
+  if (voiceEnabled && voiceId) {
+    updateProgress({
+      status: 'responding',
+      progress: 85,
+      currentStep: 'Generating voice...'
+    });
+
+    const voiceResult = await generateVoiceAudio(
+      companionId,
+      voiceId,
+      reply
+    );
+
+    audioUrl = voiceResult.audioUrl;
+    updateProgress({ progress: 90, audioUrl });
+  }
+
+  // Step 6: Generate image (90-100%)
   let imageUrl = null;
 
   if (shouldGenerateImage) {
+    // Step 6a: Build the SD prompt using a dedicated LLM that understands
+    // SD syntax, character identity anchoring, and action-to-pose translation.
+    // Passes the full conversation (history + latest exchange) alongside all
+    // scene context so the prompt accurately reflects what just happened.
     updateProgress({
       status: 'imaging',
-      progress: 85,
-      currentStep: 'Generating image...'
+      progress: voiceEnabled ? 90 : 85,
+      currentStep: 'Crafting scene...'
     });
 
-    imageUrl = await generateCompanionImage(
+    const sdPrompt = await generateSDPrompt(
       companionId,
       finalContext.outfit,
       finalContext.location,
+      finalContext.action,      // was previously dropped — now explicitly included
       finalContext.visualTags,
       finalContext.expression,
-      finalContext.isUserPresent,
       finalContext.lighting,
+      finalContext.isUserPresent,
+      userMessage,
+      reply,
+      msgHistory,               // recent history for pose/scene context
+      companionName,
+      userName,
+    );
+
+    // Step 6b: Call SD API with the LLM-crafted prompt
+    updateProgress({ currentStep: 'Generating image...' });
+
+    imageUrl = await generateCompanionImage(
+      companionId,
+      sdPrompt.positive,
+      sdPrompt.negative,
+      sdPrompt.cfg_scale,
+      sdPrompt.steps,
     );
   }
+
+  // Await memory extraction (started concurrently after LLM response — should already be done)
+  await memoryExtractionPromise;
 
   // Final step
   updateProgress({
     status: 'completed',
     progress: 100,
     currentStep: 'Complete!',
-    imageUrl
+    imageUrl,
+    audioUrl
   });
 
   const result: WorkflowResult = {
     text: reply,
     imageUrl: imageUrl,
+    audioUrl: audioUrl,
     updatedState: {
       outfit: finalContext.outfit,
       location: finalContext.location,

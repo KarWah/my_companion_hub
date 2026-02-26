@@ -19,6 +19,7 @@ model User {
   hashedPassword  String
 
   companions      Companion[]
+  ratings         Rating[]    // User's ratings of public companions
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -48,6 +49,7 @@ model Companion {
   currentOutfit     String   @default("casual clothes")
   currentLocation   String   @default("living room")
   currentAction     String   @default("looking at viewer")
+  currentMood       String   @default("neutral")        // Companion's emotional state across turns
 
   // Image Storage (NEW: File system URLs instead of base64)
   headerImageUrl    String?  // URL: /uploads/companions/{id}/headers/{imageId}.jpg
@@ -56,17 +58,41 @@ model Companion {
   // Extended Personality (JSON string with additional personality fields)
   extendedPersonality String? @db.Text // JSON: { speechStyle, speechPattern, behaviorTraits, etc. }
 
+  // Community/Discovery fields
+  isPublic          Boolean   @default(false)  // Whether companion is visible in community
+  publishedAt       DateTime?                   // When companion was published
+  viewCount         Int       @default(0)       // Number of views in community
+  chatCount         Int       @default(0)       // Number of chat sessions by other users
+  averageRating     Float     @default(0)       // Stored average rating (updated on each rating upsert)
+
+  // Relationship progression (updated by memory extractor each turn)
+  affectionLevel    Int       @default(50)       // 0-100: companion's affection toward user
+  trustLevel        Int       @default(50)       // 0-100: companion's trust in user
+
+  // Voice Integration (ElevenLabs)
+  voiceId           String?                     // ElevenLabs voice ID
+  voiceEnabled      Boolean   @default(false)   // Whether TTS is enabled
+
+  // Soft delete support
+  deletedAt         DateTime?                   // Null = active, set = deleted
+
   // User relationship
   userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   messages          Message[]
   workflowExecutions WorkflowExecution[]
+  memories          Memory[]
+  ratings           Rating[]                    // Ratings from other users
+  scheduledMessages ScheduledMessage[]          // Scheduled messages for this companion
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   // Optimized indexes for common query patterns
   @@index([userId, createdAt(sort: Desc)]) // List user's companions (most recent first)
+  @@index([isPublic, publishedAt(sort: Desc)])     // Community: newest public companions
+  @@index([isPublic, viewCount(sort: Desc)])       // Community: most viewed companions
+  @@index([isPublic, averageRating(sort: Desc)])   // Community: highest rated companions
 }
 
 model Message {
@@ -74,6 +100,7 @@ model Message {
   role         String    // "user" | "assistant"
   content      String    @db.Text // Text content
   imageUrl     String?   // If an image was generated
+  audioUrl     String?   // If TTS audio was generated (ElevenLabs)
   companionId  String
   companion    Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
   createdAt    DateTime  @default(now())
@@ -107,6 +134,7 @@ model WorkflowExecution {
   currentStep   String?
   streamedText  String?  @db.Text // Accumulate streamed tokens
   imageUrl      String?
+  audioUrl      String?  // TTS audio URL if voice enabled
   error         String?  @db.Text
   userMessageId String?
   createdAt     DateTime @default(now())
@@ -116,4 +144,121 @@ model WorkflowExecution {
   @@index([companionId, status, createdAt(sort: Desc)])
   // For cleanup and analytics queries
   @@index([createdAt])
+}
+
+model Memory {
+  id           String   @id @default(uuid())
+  companionId  String
+  companion    Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+
+  // Memory content
+  content      String   @db.Text // Human-readable memory
+  category     String   // "personal_fact", "preference", "event", "relationship"
+  importance   Int      @default(5) // 1-10 scale
+
+  // Semantic search (requires pgvector extension)
+  embedding    Unsupported("vector(1536)")? // pgvector type
+
+  // Context tracking
+  sourceMessageIds String[] // Which message(s) created this memory
+  context      String?  @db.Text // Original conversation snippet (optional)
+
+  // Metadata
+  isActive     Boolean  @default(true) // Soft delete capability
+  accessCount  Int      @default(0) // Track retrieval frequency
+  lastAccessedAt DateTime @default(now())
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Optimized indexes
+  @@index([companionId, isActive, importance(sort: Desc)])
+  @@index([companionId, category, isActive])
+  @@index([companionId, lastAccessedAt(sort: Desc)])
+  @@index([companionId, createdAt(sort: Desc)])
+}
+
+// ============================================================================
+// COMMUNITY FEATURES
+// ============================================================================
+
+model Rating {
+  id          String    @id @default(uuid())
+  companionId String
+  companion   Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  rating      Int       // 1-5 stars
+  review      String?   @db.Text // Optional review text
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([companionId, userId]) // One rating per user per companion
+  @@index([companionId, rating(sort: Desc)])
+}
+
+// ============================================================================
+// SCHEDULED MESSAGING (Cron Jobs)
+// ============================================================================
+
+model ScheduledMessage {
+  id              String    @id @default(uuid())
+  companionId     String
+  companion       Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+
+  // Scheduling configuration
+  cronExpression  String    // Cron expression, e.g., "0 8 * * *" for 8 AM daily
+  messageTemplate String    @db.Text // Template with optional variables like {{userName}}
+  timezone        String    @default("UTC") // User's timezone for schedule
+  enabled         Boolean   @default(true)
+
+  // Execution tracking
+  lastRunAt       DateTime? // When this schedule last ran
+  nextRunAt       DateTime? // Calculated next run time
+  runCount        Int       @default(0) // Total number of executions
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  logs            ScheduleLog[]
+
+  @@index([enabled, nextRunAt])
+  @@index([companionId, enabled])
+}
+
+model ScheduleLog {
+  id                  String   @id @default(uuid())
+  scheduledMessageId  String
+  scheduledMessage    ScheduledMessage @relation(fields: [scheduledMessageId], references: [id], onDelete: Cascade)
+
+  status              String   // "success" | "failed" | "skipped"
+  workflowId          String?  // Temporal workflow ID if triggered
+  error               String?  @db.Text // Error message if failed
+
+  executedAt          DateTime @default(now())
+
+  @@index([scheduledMessageId, executedAt(sort: Desc)])
+}
+
+// ============================================================================
+// SECURITY & AUDIT
+// ============================================================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  // Null for unauthenticated actions
+  action      String   // "login", "register", "companion_create", "companion_delete", etc.
+  resource    String?  // Resource type: "companion", "message", "user"
+  resourceId  String?  // ID of the affected resource
+  details     String?  @db.Text // JSON with additional context
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([resourceId])
 }

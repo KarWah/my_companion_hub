@@ -17,6 +17,15 @@ export const messageSchema = z.object({
   generateImage: z.coerce.boolean().optional(), // handle "on"/"off" checkbox strings
 });
 
+// Password complexity schema
+export const passwordComplexitySchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+  .regex(/[0-9]/, "Password must contain at least one number")
+  .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character");
+
 // Schema for User Registration
 export const registrationSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -25,7 +34,22 @@ export const registrationSchema = z.object({
     .min(3, "Username must be at least 3 characters")
     .max(20, "Username must be at most 20 characters")
     .regex(/^[a-z0-9_]+$/, "Username can only contain lowercase letters, numbers, and underscores"),
-  password: z.string()
-    .min(8, "Password must be at least 8 characters")
-    // You can add complex regex here for uppercase/numbers if desired
+  password: z.string().min(8, "Password must be at least 8 characters")
 });
+
+// Validate password complexity and return detailed errors
+export function validatePasswordComplexity(password: string): {
+  valid: boolean;
+  errors: string[];
+} {
+  const result = passwordComplexitySchema.safeParse(password);
+
+  if (result.success) {
+    return { valid: true, errors: [] };
+  }
+
+  return {
+    valid: false,
+    errors: result.error.issues.map((e) => e.message)
+  };
+}

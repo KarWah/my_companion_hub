@@ -1,8 +1,8 @@
 import { getCompanions } from "@/app/actions";
 import Link from "next/link";
-import { Plus, User, MessageSquare } from "lucide-react";
-import { Pencil } from "lucide-react";
+import { Plus, User, MessageSquare, Pencil, Clock } from "lucide-react";
 import { DeleteCompanionButton } from "@/components/delete-companion-button";
+import { PublishCompanionButton } from "@/components/publish-companion-button";
 export default async function CompanionsPage() {
   const companions = await getCompanions();
 
@@ -22,8 +22,11 @@ export default async function CompanionsPage() {
         {companions.map((c) => (
           <div
             key={c.id}
-            className="p-6 rounded-3xl border bg-slate-800 border-slate-700 hover:border-pink-500/30 hover:shadow-glow-pink hover:scale-[1.02] transition-all duration-300 flex flex-col"
+            className="relative p-6 rounded-3xl border bg-slate-800 border-slate-700 hover:border-pink-500/30 hover:shadow-glow-pink hover:scale-[1.02] transition-all duration-300 flex flex-col"
           >
+            {/* Publish button - top right corner */}
+            <PublishCompanionButton companionId={c.id} isPublic={c.isPublic} />
+
             <div className="flex items-start justify-between mb-4">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-900/50 to-pink-900/50 flex items-center justify-center text-slate-300 overflow-hidden">
                 {c.headerImageUrl ? (
@@ -58,7 +61,15 @@ export default async function CompanionsPage() {
                 >
                   <Pencil size={18} />
                 </Link>
-            
+
+                <Link
+                  href={`/companions/${c.id}/schedules`}
+                  className="flex items-center justify-center p-2 bg-slate-700/80 hover:bg-purple-500 hover:text-white rounded-lg transition-all"
+                  title="Scheduled Messages"
+                >
+                  <Clock size={18} />
+                </Link>
+
                 <DeleteCompanionButton companionId={c.id} />
               </div>
           </div>
