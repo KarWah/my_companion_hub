@@ -4,6 +4,9 @@ import "./globals.css";
 import Sidebar from "@/components/sidebar";
 import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { MobileNavProvider } from "@/components/MobileNavProvider";
+import { MobileHeader } from "@/components/MobileHeader";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,13 +25,19 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning>
         <ErrorBoundary>
           <Providers>
-            <div className="flex h-screen overflow-hidden">
-              <Sidebar />
-
-              <main className="flex-1 overflow-y-auto bg-slate-900">
-                {children}
-              </main>
-            </div>
+            <ThemeProvider>
+              <MobileNavProvider>
+                <div className="flex h-screen overflow-hidden">
+                  <Sidebar />
+                  <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                    <MobileHeader />
+                    <main className="flex-1 overflow-y-auto bg-slate-900">
+                      {children}
+                    </main>
+                  </div>
+                </div>
+              </MobileNavProvider>
+            </ThemeProvider>
           </Providers>
         </ErrorBoundary>
       </body>

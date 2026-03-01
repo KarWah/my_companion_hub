@@ -1,7 +1,7 @@
 "use client";
 
 import { ImageSelectionGrid } from "../components";
-import { BODY_TYPES, BREAST_SIZES, BUTT_SIZES } from "../constants";
+import { BODY_TYPES, BODY_TYPES_SFW, BREAST_SIZES, BUTT_SIZES } from "../constants";
 
 interface BodyStepProps {
   bodyType: string;
@@ -20,6 +20,7 @@ export function BodyStep({
   onBreastSizeChange,
   onButtSizeChange,
 }: BodyStepProps) {
+  const sfwMode = process.env.NEXT_PUBLIC_SFW_MODE === 'true';
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4">
       <div className="space-y-4">
@@ -28,7 +29,7 @@ export function BodyStep({
           <h3 className="text-lg font-bold text-white uppercase tracking-wider">Body Type</h3>
         </div>
         <ImageSelectionGrid
-          options={BODY_TYPES}
+          options={sfwMode ? BODY_TYPES_SFW : BODY_TYPES}
           selectedId={bodyType}
           onSelect={(id: string) => onBodyTypeChange(id)}
           aspectRatio="aspect-[2/3]"

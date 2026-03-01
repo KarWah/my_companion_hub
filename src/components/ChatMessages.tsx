@@ -8,13 +8,15 @@ export function ChatMessages({
   companionId,
   companionName,
   streamState,
-  optimisticMessage
+  optimisticMessage,
+  hideImages
 }: {
   initialMessages: Message[];
   companionId: string;
   companionName: string;
   streamState?: StreamState;
   optimisticMessage?: string | null;
+  hideImages?: boolean;
 }) {
   const isStreaming = streamState && !streamState.isComplete;
   const streamingText = streamState?.streamedText || '';
@@ -31,18 +33,17 @@ export function ChatMessages({
       {initialMessages.map((msg: Message) => (
         <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
           <div className="max-w-[80%] space-y-2">
-            <div className={`p-4 rounded-3xl ${
-              msg.role === "user"
-                ? "bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg text-white rounded-tr-sm"
-                : "bg-gradient-to-br from-slate-800/90 to-purple-950/30 shadow-md text-slate-200 rounded-tl-sm"
-            }`}>
+            <div
+              className={`p-4 rounded-3xl ${msg.role === "user" ? "shadow-lg text-white rounded-tr-sm" : "shadow-md text-slate-200 rounded-tl-sm"}`}
+              style={{ background: msg.role === "user" ? "var(--chat-bubble-user)" : "var(--chat-bubble-bot)" }}
+            >
               {msg.content}
               {/* Audio player for assistant messages with voice */}
               {msg.role === "assistant" && msg.audioUrl && (
                 <AudioPlayer src={msg.audioUrl} compact />
               )}
             </div>
-            {msg.imageUrl && (
+            {msg.imageUrl && !hideImages && (
               <div className="rounded-xl overflow-hidden border border-slate-700">
                 <img src={msg.imageUrl} alt={`${companionName} generated image`} className="w-full h-auto" loading="lazy" />
               </div>
@@ -55,7 +56,10 @@ export function ChatMessages({
       {shouldShowOptimistic && (
         <div className="flex justify-end">
           <div className="max-w-[80%]">
-            <div className="p-4 rounded-3xl bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg text-white rounded-tr-sm opacity-80">
+            <div
+              className="p-4 rounded-3xl shadow-lg text-white rounded-tr-sm opacity-80"
+              style={{ background: "var(--chat-bubble-user)" }}
+            >
               {optimisticMessage}
             </div>
           </div>
@@ -66,7 +70,10 @@ export function ChatMessages({
       {isStreaming && streamingText && (
         <div className="flex justify-start">
           <div className="max-w-[80%] space-y-2">
-            <div className="p-4 rounded-3xl bg-gradient-to-br from-slate-800/90 to-purple-950/30 shadow-md text-slate-200 rounded-tl-sm">
+            <div
+              className="p-4 rounded-3xl shadow-md text-slate-200 rounded-tl-sm"
+              style={{ background: "var(--chat-bubble-bot)" }}
+            >
               {streamingText}
               <span className="inline-block w-1 h-4 ml-1 bg-pink-400 animate-pulse" />
               {/* Audio player when voice is ready during streaming */}
@@ -75,7 +82,7 @@ export function ChatMessages({
               )}
             </div>
             {/* Show image placeholder or loading state */}
-            {streamingImageUrl && (
+            {streamingImageUrl && !hideImages && (
               <div className="rounded-xl overflow-hidden border border-slate-700">
                 <img src={streamingImageUrl} alt={`${companionName} generated image`} className="w-full h-auto" />
               </div>

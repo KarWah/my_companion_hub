@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import Link from "next/link";
 import { Image as ImageIcon } from "lucide-react";
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
+import { env } from "@/lib/env";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -14,7 +15,10 @@ export default async function GalleryPage() {
 
   // Optimized query with aggregation (single query instead of N+1)
   const companionsWithCounts = await prisma.companion.findMany({
-    where: { userId: user.id },
+    where: {
+      userId: user.id,
+      fetishes: env.SFW_MODE ? { isEmpty: true } : { isEmpty: false },
+    },
     orderBy: { createdAt: "desc" },
     include: {
       _count: {

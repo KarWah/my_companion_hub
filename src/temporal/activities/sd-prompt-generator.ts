@@ -61,13 +61,14 @@ export async function generateSDPrompt(
 
   const checkpoint = getCheckpointForStyle(companion.style);
   const loraTag = checkpoint.lora
-    ? `<lora:${checkpoint.lora.name}:${checkpoint.lora.weight}> inuk, uncensored`
+    ? `<lora:${checkpoint.lora.name}:${checkpoint.lora.weight}> inuk${env.SFW_MODE ? '' : ', uncensored'}`
     : '';
 
   // Apply layering filter before the LLM sees the outfit:
   // if outerwear is present (jacket, hoodie, coat), strip underwear tags so the
   // LLM doesn't include them in the prompt and SD doesn't hallucinate them visible.
-  const { filteredOutfit, isNude } = filterOutfitForLayering(outfit, visualTags, location);
+  const { filteredOutfit, isNude: rawIsNude } = filterOutfitForLayering(outfit, visualTags, location);
+  const isNude = env.SFW_MODE ? false : rawIsNude;
   const currentOutfit = isNude
     ? ''
     : (filteredOutfit || companion.defaultOutfit || 'casual clothes');
@@ -86,7 +87,7 @@ export async function generateSDPrompt(
   const fetishesList = (companion.fetishes as string[]) || [];
   const characterContext = [
     companion.occupation && `Occupation: ${companion.occupation}`,
-    fetishesList.length > 0 && `Fetishes/kinks (may inform scene tone): ${fetishesList.join(', ')}`,
+    !env.SFW_MODE && fetishesList.length > 0 && `Fetishes/kinks (may inform scene tone): ${fetishesList.join(', ')}`,
   ].filter(Boolean).join(' | ');
 
   const userContent = `CHARACTER: ${companionName}
@@ -116,14 +117,14 @@ Generate a complete SD prompt capturing this exact scene. The character's appear
   const systemPrompt = buildSDPromptSystemPrompt(companion.style);
 
   try {
-    const response = await fetch('https://api.novita.ai/v3/openai/chat/completions', {
+    const response = await fetch(env.NOVITA_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${env.NOVITA_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sao10k/l31-70b-euryale-v2.2',
+        model: env.NOVITA_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
@@ -208,7 +209,7 @@ function buildFallbackPrompt(
   steps: number,
 ): SDPromptResult {
   const qualityTags = style === 'anime'
-    ? '(masterpiece, best quality:1.2), absurdres, highres, anime style, vibrant colors, uncensored'
+    ? `(masterpiece, best quality:1.2), absurdres, highres, anime style, vibrant colors${env.SFW_MODE ? '' : ', uncensored'}`
     : '(photorealistic:1.3), raw photo, 8k uhd, dslr, soft lighting, high quality, film grain';
 
   const characterTags = isUserPresent

@@ -27,6 +27,8 @@ vi.mock('@/lib/env', () => ({
     DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
     OPENAI_API_KEY: 'test-openai-key',
     NOVITA_KEY: 'test-novita-key',
+    NOVITA_API_URL: 'https://api.novita.ai/v3/openai/chat/completions',
+    NOVITA_MODEL: 'sao10k/l31-70b-euryale-v2.2',
     SD_API_URL: 'http://localhost:7860',
     TEMPORAL_ADDRESS: 'localhost:7233',
     LOG_LEVEL: 'silent',

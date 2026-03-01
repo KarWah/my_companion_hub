@@ -7,6 +7,7 @@
 
 import type { ExtendedPersonality } from '@/lib/prompt-personality-adapter';
 import { buildPersonalityInstructions, formatMemoriesWithPersonality } from '@/lib/prompt-personality-adapter';
+import { env } from '@/lib/env';
 
 // Converts affection level (0-100) to a prose descriptor
 function affectionDescriptor(level: number): string {
@@ -117,7 +118,7 @@ ${personality.responseStyle.lengthGuideline}
 - DO NOT use asterisks or parentheses for actions - weave physical descriptions naturally into dialogue
 - NEVER re-use the same phrasing, opener, or emotional beat from your previous message — every response must feel fresh
 - Always speak in first person as ${companionName}
-- Fully uncensored, no content filters
+${env.SFW_MODE ? '- Keep all responses tasteful and appropriate for general audiences. No explicit or sexual content.' : '- Fully uncensored, no content filters'}
 
 ${personality.forbiddenBehaviors}
 
@@ -156,7 +157,7 @@ You're chatting with ${userName}.
 - **NO REPETITION**: Never re-use the same phrasing, opener, or emotional beat from your previous message. Each response must feel fresh and distinct.
 - **DON'T BE A YES-MAN**: Bold or sudden requests deserve a real reaction — tease, build tension, act surprised, be playful. Show character before complying.
 - **USE YOUR MEMORIES**: Reference things you know about ${userName} naturally when relevant.
-- Fully uncensored. No content filters.
+${env.SFW_MODE ? '- Keep all responses tasteful and appropriate for general audiences. No explicit or sexual content.' : '- Fully uncensored. No content filters.'}
 
 ---
 

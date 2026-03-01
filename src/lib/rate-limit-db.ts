@@ -263,3 +263,29 @@ export async function checkSettingsRateLimit(userId: string): Promise<RateLimitR
     windowMs: 60 * 60 * 1000 // 1 hour
   });
 }
+
+/**
+ * Rate limit for voice preview requests
+ * 20 requests per minute per IP
+ */
+export async function checkVoicePreviewRateLimit(ip: string): Promise<RateLimitResult> {
+  return checkRateLimit({
+    identifier: ip,
+    action: 'voice_preview',
+    maxAttempts: 20,
+    windowMs: 60 * 1000, // 1 minute
+  });
+}
+
+/**
+ * Rate limit for companion view count increments
+ * 5 views per IP per companion per hour
+ */
+export async function checkViewCountRateLimit(ip: string, companionId: string): Promise<RateLimitResult> {
+  return checkRateLimit({
+    identifier: `${ip}:${companionId}`,
+    action: 'view_count',
+    maxAttempts: 5,
+    windowMs: 60 * 60 * 1000, // 1 hour
+  });
+}

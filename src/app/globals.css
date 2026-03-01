@@ -17,6 +17,21 @@
   --glow-color: rgba(236, 72, 153, 0.4);
 }
 
+[data-theme="charcoal"] {
+  --background: #0f1117;
+  --foreground: #e2e8f0;
+  --sidebar: #1a1d27;
+  --card-bg: #1e2130;
+  --card-border: #2d3148;
+  --chat-bubble-user: linear-gradient(135deg, #6366f1, #818cf8);
+  --chat-bubble-bot: #1e2130;
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --accent: #818cf8;
+  --accent-hover: #6366f1;
+  --glow-color: rgba(99, 102, 241, 0.4);
+}
+
 body {
   color: var(--foreground);
   background: var(--background);

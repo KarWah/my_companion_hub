@@ -5,6 +5,8 @@
  * contextually accurate Stable Diffusion prompts from scene context.
  */
 
+import { env } from '@/lib/env';
+
 /**
  * Builds the system prompt for the SD image prompt generator LLM.
  *
@@ -12,7 +14,7 @@
  */
 export function buildSDPromptSystemPrompt(style: 'anime' | 'realistic'): string {
   const qualityPositive = style === 'anime'
-    ? '(masterpiece, best quality:1.2), absurdres, highres, anime style, key visual, vibrant colors, uncensored'
+    ? `(masterpiece, best quality:1.2), absurdres, highres, anime style, key visual, vibrant colors${env.SFW_MODE ? '' : ', uncensored'}`
     : '(photorealistic:1.3), raw photo, 8k uhd, dslr, soft lighting, high quality, film grain';
 
   const qualityNegative = style === 'anime'
@@ -73,7 +75,7 @@ Do NOT add items that are not listed. Do NOT remove listed items because the sce
 The ACTION field tells you what the character is doing. Translate it into SD pose descriptors:
 - "Taking a selfie" → looking at viewer, holding phone, selfie angle, one arm extended forward
 - "Lying on bed" → lying down, on back, supine position, relaxed, arms at sides
-- "Reaching back to scoop cum" → rear view, hand reaching back, looking over shoulder, bent forward slightly
+${env.SFW_MODE ? '' : '- "Reaching back to scoop cum" → rear view, hand reaching back, looking over shoulder, bent forward slightly\n'}
 - "Cooking at stove" → standing, facing stove, arms extended forward, from behind
 - "Posing for a photo" → looking at viewer, hand on hip, confident pose, front view
 - "Sitting on couch" → sitting, legs crossed, relaxed posture, front view
@@ -112,7 +114,10 @@ Then add scene-appropriate additions:
 ---
 
 ## EXAMPLE OUTPUT (anime style, solo, clothed scene)
-{"positive": "(masterpiece, best quality:1.2), absurdres, highres, anime style, key visual, vibrant colors, uncensored, <lora:example:0.4> inuk, uncensored, (1girl, solo), (long black hair:1.2), (blue eyes:1.1), (pale skin:1.1), (large breasts:1.1), slim waist, white oversized hoodie, black shorts, sitting on couch, legs tucked under, looking at viewer, front view, (smiling:1.1), (living room), soft evening lighting", "negative": "(bad quality:1.15), (worst quality:1.3), neghands, monochrome, 3d, realistic, photorealistic, long neck, bad anatomy, bad hands, extra fingers, ugly, watermark, text, multiple people, 2girls, 1boy, male, penis, boyfriend, beard, male focus"}
+${env.SFW_MODE
+  ? `{"positive": "(masterpiece, best quality:1.2), absurdres, highres, anime style, key visual, vibrant colors, (1girl, solo), (long black hair:1.2), (blue eyes:1.1), (pale skin:1.1), (large breasts:1.1), slim waist, white oversized hoodie, black shorts, sitting on couch, legs tucked under, looking at viewer, front view, (smiling:1.1), (living room), soft evening lighting", "negative": "(bad quality:1.15), (worst quality:1.3), neghands, monochrome, 3d, realistic, photorealistic, long neck, bad anatomy, bad hands, extra fingers, ugly, watermark, text, multiple people, 2girls, 1boy, male, penis, boyfriend, beard, male focus"}`
+  : `{"positive": "(masterpiece, best quality:1.2), absurdres, highres, anime style, key visual, vibrant colors, uncensored, <lora:example:0.4> inuk, uncensored, (1girl, solo), (long black hair:1.2), (blue eyes:1.1), (pale skin:1.1), (large breasts:1.1), slim waist, white oversized hoodie, black shorts, sitting on couch, legs tucked under, looking at viewer, front view, (smiling:1.1), (living room), soft evening lighting", "negative": "(bad quality:1.15), (worst quality:1.3), neghands, monochrome, 3d, realistic, photorealistic, long neck, bad anatomy, bad hands, extra fingers, ugly, watermark, text, multiple people, 2girls, 1boy, male, penis, boyfriend, beard, male focus"}`
+}
 
 ---
 

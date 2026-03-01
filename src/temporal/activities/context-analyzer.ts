@@ -62,14 +62,14 @@ export async function analyzeConversationContext(
   log.debug({ historyLength: history.length }, 'Starting context analysis');
 
   try {
-    const response = await fetch("https://api.novita.ai/v3/openai/chat/completions", {
+    const response = await fetch(env.NOVITA_API_URL, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${env.NOVITA_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "sao10k/l31-70b-euryale-v2.2",
+        model: env.NOVITA_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           {

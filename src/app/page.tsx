@@ -1,7 +1,45 @@
 import { getActiveCompanion } from "@/app/actions";
 import prisma from "@/lib/prisma";
 import { ChatContainer } from "@/components/ChatContainer";
+import { env } from "@/lib/env";
 import type { Message } from "@/types/index";
+
+const MOOD_EMOJI: Record<string, string> = {
+  neutral: "😐", happy: "😊", playful: "😄", affectionate: "🥰",
+  excited: "✨", flirty: "😘", melancholic: "😔", irritated: "😒",
+  jealous: "😤", worried: "😟", embarrassed: "😳", aroused: "🔥",
+};
+
+function StatBar({ level }: { level: number }) {
+  const filled = Math.round((level ?? 0) / 20);
+  return (
+    <span className="font-mono text-slate-300">
+      {"█".repeat(filled)}{"░".repeat(5 - filled)} {level ?? 0}
+    </span>
+  );
+}
+
+function MoodDisplay({ companion }: { companion: Record<string, unknown> }) {
+  const mood = (companion.currentMood as string) ?? "neutral";
+  const affection = (companion.affectionLevel as number) ?? 0;
+  const trust = (companion.trustLevel as number) ?? 0;
+  return (
+    <>
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-slate-500">Mood:</span>
+        <span className="text-yellow-300">{MOOD_EMOJI[mood] ?? "😐"} {mood}</span>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-slate-500">Affection:</span>
+        <span className="text-pink-300">❤ <StatBar level={affection} /></span>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-slate-500">Trust:</span>
+        <span className="text-blue-300">🤝 <StatBar level={trust} /></span>
+      </div>
+    </>
+  );
+}
 
 export default async function ChatPage({
   searchParams,
@@ -55,6 +93,8 @@ export default async function ChatPage({
     role: m.role as Message["role"],
   }));
 
+  const hideImages = env.SFW_MODE && (companion.fetishes?.length ?? 0) > 0;
+
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto">
       <div className="p-4 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800/95 backdrop-blur-md z-10">
@@ -97,6 +137,8 @@ export default async function ChatPage({
               {companion.currentAction}
             </span>
           </div>
+          <div className="border-t border-slate-700/50 my-1" />
+          <MoodDisplay companion={companion} />
         </div>
       </div>
 
@@ -106,6 +148,7 @@ export default async function ChatPage({
         companionName={companion.name}
         companionVoiceEnabled={companion.voiceEnabled}
         companionVoiceId={companion.voiceId}
+        hideImages={hideImages}
       />
     </div>
   );

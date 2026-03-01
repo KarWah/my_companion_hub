@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { getPublicCompanionById, incrementCompanionViewCount } from "@/app/actions";
+import { env } from '@/lib/env';
 import { ArrowLeft, Eye, MessageSquare, User, Heart, Briefcase, Star, MessageCircle, Sparkles, Smile, AlertCircle, Zap } from "lucide-react";
 import Link from "next/link";
 import { RatingStars } from "@/components/community/RatingStars";
 import { CloneCompanionButton } from "@/components/community/CloneCompanionButton";
 import { RateCompanionForm } from "@/components/community/RateCompanionForm";
+import { ShareLinkButton } from "@/components/community/ShareLinkButton";
 
 interface CompanionDetailPageProps {
   params: Promise<{ id: string }>;
@@ -260,7 +262,7 @@ export default async function CompanionDetailPage({ params }: CompanionDetailPag
             )}
 
             {/* Secret Desires / Fetishes */}
-            {companion.fetishes && companion.fetishes.length > 0 && (
+            {!env.SFW_MODE && companion.fetishes && companion.fetishes.length > 0 && (
               <div className="p-6 bg-slate-800/50 rounded-xl border border-slate-700">
                 <h3 className="text-lg font-semibold text-white mb-3">Secret Desires</h3>
                 <div className="flex flex-wrap gap-2">
@@ -277,7 +279,10 @@ export default async function CompanionDetailPage({ params }: CompanionDetailPag
               <p className="text-slate-400 text-sm mb-4">
                 Add {companion.name} to your companions and start a conversation.
               </p>
-              <CloneCompanionButton companion={companion} />
+              <div className="flex gap-2 flex-wrap">
+                <CloneCompanionButton companion={companion} />
+                <ShareLinkButton />
+              </div>
             </div>
 
             {/* Rate Companion */}

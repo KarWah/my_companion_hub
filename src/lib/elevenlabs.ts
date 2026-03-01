@@ -201,8 +201,7 @@ export async function generateSpeech(
 export function getVoicePreviewUrl(voiceId: string): string {
   const voice = RECOMMENDED_VOICES.find((v) => v.id === voiceId);
   if (voice) {
-    // ElevenLabs provides preview URLs for default voices
-    return `https://api.elevenlabs.io/v1/voices/${voiceId}/preview`;
+    return voice.previewUrl;
   }
   return "";
 }

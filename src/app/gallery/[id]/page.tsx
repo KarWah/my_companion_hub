@@ -1,5 +1,6 @@
 import { getActiveCompanion } from "@/app/actions";
 import { redirect } from "next/navigation";
+import { env } from "@/lib/env";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
@@ -34,6 +35,10 @@ export default async function CompanionGalleryPage({
   if (!companion) {
     redirect("/gallery");
   }
+
+  const isNsfw = companion.fetishes.length > 0;
+  if (env.SFW_MODE && isNsfw) redirect("/gallery");
+  if (!env.SFW_MODE && !isNsfw) redirect("/gallery");
 
   // Get paginated messages with images for this companion
   const { items: messagesWithImages, nextCursor, hasMore } = await paginateMessages(

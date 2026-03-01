@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RECOMMENDED_VOICES } from "@/lib/elevenlabs";
+import { apiLogger } from "@/lib/logger";
+import { checkVoicePreviewRateLimit, getClientIp } from "@/lib/rate-limit-db";
 
 /**
  * Voice Preview API Route
  * Proxies audio from ElevenLabs CDN to avoid CORS issues
  */
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request.headers);
+  const rateLimit = await checkVoicePreviewRateLimit(ip);
+  if (!rateLimit.success) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+  }
+
   const voiceId = request.nextUrl.searchParams.get("voiceId");
 
   if (!voiceId) {
@@ -36,7 +44,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Voice preview fetch error:", error);
+    apiLogger.error({ voiceId, error }, "Voice preview fetch error");
     return NextResponse.json(
       { error: "Failed to fetch audio" },
       { status: 500 }

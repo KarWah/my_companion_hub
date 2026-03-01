@@ -247,6 +247,11 @@ export async function deleteImage(imageUrl: string): Promise<boolean> {
     if (imageUrl.startsWith('/uploads/')) {
       // Public URL format: /uploads/companions/{id}/headers/{filename}
       filepath = path.join(process.cwd(), 'public', imageUrl);
+      const resolved = path.resolve(filepath);
+      if (!resolved.startsWith(UPLOAD_BASE_DIR)) {
+        log.warn({ imageUrl }, 'Blocked path traversal attempt in deleteImage');
+        return false;
+      }
     } else if (imageUrl.startsWith('data:image')) {
       // Base64 data - nothing to delete
       log.debug('Skipping deletion of base64 data');

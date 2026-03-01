@@ -21,6 +21,7 @@ const optionalEnvVars = [
   'ELEVENLABS_API_KEY',  // Voice TTS (free tier)
   'CRON_SECRET',         // Secret for cron endpoint auth
   'REDIS_URL',           // Redis connection URL for real-time token streaming
+  'SFW_MODE',        // Set to 'true' to suppress explicit content in prompts and UI
 ] as const;
 
 /**
@@ -105,4 +106,10 @@ export const env = {
 
   // Redis for real-time token streaming (defaults to local dev instance)
   REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
+
+  // OpenAI API key for semantic embeddings (memory system)
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+
+  // SFW mode — disables explicit content in LLM prompts, image gen, and UI
+  SFW_MODE: process.env.SFW_MODE === 'true',
 } as const;

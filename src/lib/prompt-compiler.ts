@@ -1,6 +1,7 @@
 // lib/prompt-compiler.ts
 import { CompanionWizardState, INITIAL_WIZARD_STATE, Companion } from "@/types";
 import type { ExtendedPersonality } from "@/lib/prompt-personality-adapter";
+import { env } from '@/lib/env';
 
 export function compileCompanionProfile(data: CompanionWizardState) {
   // 1. Construct Visual Tags (Stable Diffusion)
@@ -152,7 +153,7 @@ function compileRichPersonality(
 
   // 7. Interests & Desires (existing)
   sections.push(`**Interests:** You love ${hobbiesList}.`);
-  if (fetishList) {
+  if (fetishList && !env.SFW_MODE) {
     sections.push(`**Secret Desires:** You are into ${fetishList}.`);
   }
 

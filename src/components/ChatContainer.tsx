@@ -10,13 +10,15 @@ export function ChatContainer({
   companionId,
   companionName,
   companionVoiceEnabled = false,
-  companionVoiceId
+  companionVoiceId,
+  hideImages
 }: {
   initialMessages: Message[];
   companionId: string;
   companionName: string;
   companionVoiceEnabled?: boolean;
   companionVoiceId?: string | null;
+  hideImages?: boolean;
 }) {
   const [streamState, setStreamState] = useState<StreamState | undefined>(undefined);
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(null);
@@ -64,6 +66,7 @@ export function ChatContainer({
           companionName={companionName}
           streamState={streamState}
           optimisticMessage={optimisticMessage}
+          hideImages={hideImages}
         />
       </div>
 

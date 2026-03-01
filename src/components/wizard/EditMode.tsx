@@ -34,6 +34,7 @@ import {
   HAIR_COLORS,
   EYE_COLORS,
   BODY_TYPES,
+  BODY_TYPES_SFW,
   BREAST_SIZES,
   BUTT_SIZES,
 } from "./constants";
@@ -116,6 +117,7 @@ export function EditMode({
   setSubmitError,
   handleSubmit,
 }: EditModeProps) {
+  const sfwMode = process.env.NEXT_PUBLIC_SFW_MODE === 'true';
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-8 pb-32 px-4 md:px-6">
 
@@ -300,6 +302,7 @@ export function EditMode({
                   placeholder="Type and press Enter..."
                 />
               </div>
+              {!sfwMode && (
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-purple-500 uppercase tracking-wider ml-1 flex items-center gap-1">
                   <Sparkles size={10} /> Fetishes & Kinks
@@ -327,6 +330,7 @@ export function EditMode({
                   placeholder="Type and press Enter..."
                 />
               </div>
+              )}
             </div>
           </div>
         </Section>
@@ -521,7 +525,7 @@ export function EditMode({
             <div>
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Body Type</h3>
               <ImageSelectionGrid
-                options={BODY_TYPES}
+                options={sfwMode ? BODY_TYPES_SFW : BODY_TYPES}
                 selectedId={state.bodyType}
                 onSelect={(id: string) => update('bodyType', id)}
                 aspectRatio="aspect-[2/3]"

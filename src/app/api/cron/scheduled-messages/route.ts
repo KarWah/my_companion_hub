@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import prisma from "@/lib/prisma";
 import { getTemporalClient } from "@/lib/temporal";
 import { getNextRunTime } from "@/lib/cron-scheduler";
@@ -28,7 +29,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "Cron not configured" }, { status: 200 });
   }
 
-  if (authHeader !== `Bearer ${expectedSecret}`) {
+  const expected = Buffer.from(`Bearer ${expectedSecret}`);
+  const provided = Buffer.from(authHeader || '');
+  const isValid = provided.length === expected.length && timingSafeEqual(provided, expected);
+  if (!isValid) {
     apiLogger.warn("Invalid cron secret attempted");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

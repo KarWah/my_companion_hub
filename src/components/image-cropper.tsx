@@ -106,7 +106,7 @@ export function ImageCropper({ imageUrl, onSave, onCancel }: ImageCropperProps) 
     );
 
     // Convert to base64
-    const croppedImage = canvas.toDataURL("image/png");
+    const croppedImage = canvas.toDataURL("image/jpeg", 0.9);
     onSave(croppedImage);
   };
 

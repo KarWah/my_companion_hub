@@ -4,12 +4,14 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAuthenticatedUser, verifyCompanionOwnership } from "@/lib/auth-helpers";
-import { checkCompanionCreationRateLimit, checkSettingsRateLimit } from "@/lib/rate-limit-db";
+import { checkCompanionCreationRateLimit, checkSettingsRateLimit, checkViewCountRateLimit, getClientIp } from "@/lib/rate-limit-db";
+import { headers } from "next/headers";
 import { validateBase64Image, sanitizeBase64Image } from "@/lib/image-validation";
 import { uploadImage, deleteCompanionImages, copyCompanionHeaderImage } from "@/lib/storage";
 import { logger } from "@/lib/logger";
 import { logCompanionEvent, logRatingEvent, logScheduledMessageEvent } from "@/lib/audit-logger";
 import type { ActionResult, Companion, DiscoveryFilters, PublicCompanion } from "@/types/index";
+import { env } from "@/lib/env";
 
 
 
@@ -30,9 +32,11 @@ export async function createCompanion(formData: FormData) {
   const userAppearance = formData.get("userAppearance") as string;
   const relationship = formData.get("relationship") as string;
   const hobbiesRaw = formData.get("hobbies") as string;
-  const hobbies = hobbiesRaw ? JSON.parse(hobbiesRaw) : [];
+  let hobbies: string[] = [];
+  try { hobbies = hobbiesRaw ? JSON.parse(hobbiesRaw) : []; } catch { hobbies = []; }
   const fetishesRaw = formData.get("fetishes") as string;
-  const fetishes = fetishesRaw ? JSON.parse(fetishesRaw) : [];
+  let fetishes: string[] = [];
+  try { fetishes = fetishesRaw ? JSON.parse(fetishesRaw) : []; } catch { fetishes = []; }
   const occupation = formData.get("occupation") as string;
   const personalityArchetype = formData.get("personalityArchetype") as string;
   const extendedPersonality = formData.get("extendedPersonality") as string;
@@ -103,8 +107,9 @@ export async function getCompanions(): Promise<Companion[]> {
   const user = await getAuthenticatedUser();
 
   // Cast: Prisma types are stale — remove `as` after `npx prisma generate`
+  const fetishFilter = env.SFW_MODE ? { isEmpty: true } : { isEmpty: false };
   return await prisma.companion.findMany({
-    where: { userId: user.id, deletedAt: null },
+    where: { userId: user.id, deletedAt: null, fetishes: fetishFilter },
     orderBy: { createdAt: "desc" },
   }) as unknown as Companion[];
 }
@@ -112,6 +117,8 @@ export async function getCompanions(): Promise<Companion[]> {
 
 export async function getActiveCompanion(companionId?: string): Promise<Companion | null> {
   const user = await getAuthenticatedUser();
+
+  const fetishFilter = env.SFW_MODE ? { isEmpty: true } : { isEmpty: false };
 
   if (companionId) {
     // Cast: Prisma types are stale — remove `as` after `npx prisma generate`
@@ -124,11 +131,29 @@ export async function getActiveCompanion(companionId?: string): Promise<Companio
       return null;
     }
 
+    // Mode gate: NSFW companions hidden in SFW mode and vice-versa
+    const isNsfw = companion.fetishes.length > 0;
+    if (env.SFW_MODE && isNsfw) return null;
+    if (!env.SFW_MODE && !isNsfw) return null;
+
     return companion;
   }
 
+  // Prefer the companion most recently chatted with
+  const latestMessage = await prisma.message.findFirst({
+    where: { companion: { userId: user.id, deletedAt: null, fetishes: fetishFilter } },
+    orderBy: { createdAt: "desc" },
+    select: { companionId: true },
+  });
+  if (latestMessage) {
+    const recent = await prisma.companion.findFirst({
+      where: { id: latestMessage.companionId, userId: user.id, deletedAt: null, fetishes: fetishFilter },
+    }) as unknown as Companion | null;
+    if (recent) return recent;
+  }
+  // Fallback: most recently created
   return await prisma.companion.findFirst({
-    where: { userId: user.id, deletedAt: null },
+    where: { userId: user.id, deletedAt: null, fetishes: fetishFilter },
     orderBy: { createdAt: "desc" },
   }) as unknown as Companion | null;
 }
@@ -183,9 +208,11 @@ export async function updateCompanion(id: string, formData: FormData) {
   const userAppearance = formData.get("userAppearance") as string;
   const relationship = formData.get("relationship") as string;
   const hobbiesRaw = formData.get("hobbies") as string;
-  const hobbies = hobbiesRaw ? JSON.parse(hobbiesRaw) : [];
+  let hobbies: string[] = [];
+  try { hobbies = hobbiesRaw ? JSON.parse(hobbiesRaw) : []; } catch { hobbies = []; }
   const fetishesRaw = formData.get("fetishes") as string;
-  const fetishes = fetishesRaw ? JSON.parse(fetishesRaw) : [];
+  let fetishes: string[] = [];
+  try { fetishes = fetishesRaw ? JSON.parse(fetishesRaw) : []; } catch { fetishes = []; }
   const occupation = formData.get("occupation") as string;
   const personalityArchetype = formData.get("personalityArchetype") as string;
   const extendedPersonality = formData.get("extendedPersonality") as string;
@@ -357,6 +384,7 @@ export async function getPublicCompanions(filters: DiscoveryFilters = {}): Promi
   const where: Record<string, unknown> = {
     isPublic: true,
     deletedAt: null,
+    fetishes: env.SFW_MODE ? { isEmpty: true } : { isEmpty: false },
   };
 
   if (fetishes && fetishes.length > 0) {
@@ -383,9 +411,10 @@ export async function getPublicCompanions(filters: DiscoveryFilters = {}): Promi
     where.style = style;
   }
 
-  // Search by name (case-insensitive)
+  // Search by name (case-insensitive, capped to prevent abuse)
   if (search && search.trim()) {
-    where.name = { contains: search.trim(), mode: 'insensitive' };
+    const safeSearch = search.trim().slice(0, 100);
+    where.name = { contains: safeSearch, mode: 'insensitive' };
   }
 
   // Build order by clause
@@ -489,6 +518,10 @@ export async function getPublicCompanionById(companionId: string): Promise<Publi
     return null;
   }
 
+  const isNsfw = companion.fetishes.length > 0;
+  if (env.SFW_MODE && isNsfw) return null;
+  if (!env.SFW_MODE && !isNsfw) return null;
+
   const ratings = companion.ratings || [];
   const averageRating = ratings.length > 0
     ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
@@ -521,6 +554,10 @@ export async function getPublicCompanionById(companionId: string): Promise<Publi
  * Increment view count for a public companion
  */
 export async function incrementCompanionViewCount(companionId: string): Promise<void> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+  const rateLimit = await checkViewCountRateLimit(ip, companionId);
+  if (!rateLimit.success) return;
   await prisma.companion.update({
     where: { id: companionId },
     data: { viewCount: { increment: 1 } },

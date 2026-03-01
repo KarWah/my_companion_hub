@@ -53,6 +53,8 @@ interface IdentityStepProps {
   onUpdate: (field: keyof CompanionWizardState, value: any) => void;
 }
 
+const sfwMode = process.env.NEXT_PUBLIC_SFW_MODE === 'true';
+
 export function IdentityStep({
   name,
   age,
@@ -171,6 +173,7 @@ export function IdentityStep({
               />
             </div>
 
+            {!sfwMode && (
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-purple-500 uppercase tracking-wider ml-1 flex items-center gap-1">
                 <Sparkles size={10} /> Fetishes & Kinks
@@ -198,6 +201,7 @@ export function IdentityStep({
                 placeholder="Type and press Enter..."
               />
             </div>
+            )}
           </div>
 
           <div className="border border-slate-800 rounded-2xl overflow-hidden">

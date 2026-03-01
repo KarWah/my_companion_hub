@@ -35,8 +35,8 @@ export async function generateCompanionImage(
     'Content-Type': 'application/json',
   };
 
-  if (process.env.NOVITA_KEY) {
-    headers['Authorization'] = `Bearer ${process.env.NOVITA_KEY}`;
+  if (env.NOVITA_KEY) {
+    headers['Authorization'] = `Bearer ${env.NOVITA_KEY}`;
   }
 
   log.debug({ apiUrl, hasAuth: !!headers['Authorization'], promptLength: positive.length }, 'Sending generation request');
