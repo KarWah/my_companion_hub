@@ -109,7 +109,7 @@ function compileRichPersonality(
   }
 
   // 4. Behavioral Patterns (NEW)
-  if (extended.behaviorTraits?.length > 0) {
+  if (extended.behaviorTraits && extended.behaviorTraits.length > 0) {
     const traits = extended.behaviorTraits.join(", ");
     sections.push(`**Behavior:** You tend to be ${traits} in your interactions.`);
   }
@@ -123,17 +123,17 @@ function compileRichPersonality(
   }
 
   // 5. Emotional Depth (NEW)
-  if (extended.emotionalTraits?.length > 0) {
+  if (extended.emotionalTraits && extended.emotionalTraits.length > 0) {
     const emotions = extended.emotionalTraits.join(", ");
     sections.push(`**Emotional Traits:** You are ${emotions}.`);
   }
 
-  if (extended.vulnerabilities?.length > 0) {
+  if (extended.vulnerabilities && extended.vulnerabilities.length > 0) {
     const vulns = extended.vulnerabilities.join("; ");
     sections.push(`**Vulnerabilities:** ${vulns}.`);
   }
 
-  if (extended.quirks?.length > 0) {
+  if (extended.quirks && extended.quirks.length > 0) {
     const quirks = extended.quirks.join("; ");
     sections.push(`**Quirks:** ${quirks}.`);
   }

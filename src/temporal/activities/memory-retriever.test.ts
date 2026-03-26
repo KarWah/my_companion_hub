@@ -67,7 +67,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 2 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -76,7 +76,7 @@ describe('retrieveRelevantMemories', () => {
     // First memory should rank higher (recent + perfect similarity + high importance)
     expect(result.memories[0].id).toBe('mem-1');
     expect(result.memories[0]).toHaveProperty('relevanceScore');
-    expect(result.memories[0].relevanceScore).toBeGreaterThan(result.memories[1].relevanceScore);
+    expect(result.memories[0].relevanceScore!).toBeGreaterThan(result.memories[1].relevanceScore!);
   });
 
   it('should handle memories with missing embeddings', async () => {
@@ -100,7 +100,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -132,7 +132,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -161,7 +161,7 @@ describe('retrieveRelevantMemories', () => {
       context: null,
     }));
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 10 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -191,7 +191,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
     await retrieveRelevantMemories('comp-1', 'test');
@@ -226,7 +226,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockRejectedValue(new Error('DB error'));
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -270,7 +270,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 2 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -319,7 +319,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 2 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -393,7 +393,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 2 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -424,7 +424,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');
@@ -503,7 +503,7 @@ describe('retrieveRelevantMemories', () => {
       }
     ];
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue(mockMemories as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 2 });
 
     const result = await retrieveRelevantMemories('comp-1', 'test');

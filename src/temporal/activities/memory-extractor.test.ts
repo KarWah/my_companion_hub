@@ -49,7 +49,7 @@ describe('extractAndStoreMemories', () => {
       content: 'User has a dog named Billy',
       category: 'personal_fact',
       importance: 8,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-123'],
       context: 'User mentioned their dog',
       isActive: true,
@@ -57,7 +57,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     const result = await extractAndStoreMemories(
       'comp-1',
@@ -109,7 +109,7 @@ describe('extractAndStoreMemories', () => {
       content: 'Test memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -117,7 +117,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -159,7 +159,7 @@ describe('extractAndStoreMemories', () => {
         content: 'Test memory',
         category: category as any,
         importance: 5,
-        embedding: mockEmbedding as any,
+        embedding: mockEmbedding,
         sourceMessageIds: ['msg-1'],
         context: null,
         isActive: true,
@@ -167,7 +167,7 @@ describe('extractAndStoreMemories', () => {
         lastAccessedAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -207,7 +207,7 @@ describe('extractAndStoreMemories', () => {
         content: 'Test 1',
         category: 'personal_fact',
         importance: 1,
-        embedding: mockEmbedding as any,
+        embedding: mockEmbedding,
         sourceMessageIds: ['msg-1'],
         context: null,
         isActive: true,
@@ -215,14 +215,14 @@ describe('extractAndStoreMemories', () => {
         lastAccessedAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-      })
+      } as any)
       .mockResolvedValueOnce({
         id: 'mem-2',
         companionId: 'comp-1',
         content: 'Test 2',
         category: 'personal_fact',
         importance: 10,
-        embedding: mockEmbedding as any,
+        embedding: mockEmbedding,
         sourceMessageIds: ['msg-1'],
         context: null,
         isActive: true,
@@ -230,7 +230,7 @@ describe('extractAndStoreMemories', () => {
         lastAccessedAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -270,7 +270,7 @@ describe('extractAndStoreMemories', () => {
       content: 'Test memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -278,7 +278,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -313,7 +313,7 @@ describe('extractAndStoreMemories', () => {
       content: 'Valid memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -321,7 +321,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     const result = await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -408,7 +408,7 @@ describe('extractAndStoreMemories', () => {
       content: 'Memory 1',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -416,7 +416,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     const result = await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -452,7 +452,7 @@ describe('extractAndStoreMemories', () => {
       content: 'User likes pizza',
       category: 'preference',
       importance: 7,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -460,7 +460,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -497,7 +497,7 @@ describe('extractAndStoreMemories', () => {
       content: 'Test memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-abc-123'],
       context: null,
       isActive: true,
@@ -505,7 +505,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-abc-123');
 
@@ -618,7 +618,7 @@ describe('extractAndStoreMemories', () => {
       content: 'User loves pizza',
       category: 'preference',
       importance: 7,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: 'Mentioned while discussing food preferences',
       isActive: true,
@@ -626,7 +626,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -663,7 +663,7 @@ describe('extractAndStoreMemories', () => {
       content: 'Test memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -671,7 +671,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -737,7 +737,7 @@ describe('extractAndStoreMemories', () => {
       content: 'User made companion feel truly valued for the first time',
       category: 'emotional_moment',
       importance: 8,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -745,7 +745,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 
@@ -787,7 +787,7 @@ describe('extractAndStoreMemories', () => {
       content: 'A warm emotional moment',
       category: 'emotional_moment',
       importance: 9,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -795,7 +795,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
 
     const result = await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
@@ -855,9 +855,9 @@ describe('extractAndStoreMemories', () => {
     vi.spyOn(embeddings, 'generateEmbedding').mockResolvedValue(mockEmbedding);
     vi.mocked(prisma.memory.create).mockResolvedValue({
       id: 'mem-1', companionId: 'comp-1', content: 'Test memory', category: 'personal_fact',
-      importance: 5, embedding: mockEmbedding as any, sourceMessageIds: ['msg-1'], context: null,
+      importance: 5, embedding: mockEmbedding, sourceMessageIds: ['msg-1'], context: null,
       isActive: true, accessCount: 0, lastAccessedAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
-    });
+    } as any);
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
@@ -896,9 +896,9 @@ describe('extractAndStoreMemories', () => {
     vi.spyOn(embeddings, 'generateEmbedding').mockResolvedValue(mockEmbedding);
     vi.mocked(prisma.memory.create).mockResolvedValue({
       id: 'mem-1', companionId: 'comp-1', content: 'Test memory', category: 'personal_fact',
-      importance: 5, embedding: mockEmbedding as any, sourceMessageIds: ['msg-1'], context: null,
+      importance: 5, embedding: mockEmbedding, sourceMessageIds: ['msg-1'], context: null,
       isActive: true, accessCount: 0, lastAccessedAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
-    });
+    } as any);
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
 
     const result = await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
@@ -938,7 +938,7 @@ describe('extractAndStoreMemories', () => {
       content: 'A test memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -946,7 +946,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
     vi.mocked(prisma.$executeRaw).mockRejectedValue(new Error('DB error during relationship update'));
 
     // Should not throw — relationship update is non-critical
@@ -981,7 +981,7 @@ describe('extractAndStoreMemories', () => {
       content: 'Memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -989,7 +989,7 @@ describe('extractAndStoreMemories', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories('comp-1', 'Lumen', 'Karl', 'test', 'response', [], 'msg-1');
 

@@ -217,7 +217,7 @@ export async function updateCompanionContext(
         currentLocation: location,
         currentAction: action,
         currentMood: mood,
-      } as any // currentMood added to schema — remove cast after `prisma generate`
+      }
     });
 
     log.info({

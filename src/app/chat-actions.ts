@@ -69,8 +69,7 @@ export async function sendMessage(formData: FormData) {
     content: m.content
   }));
 
-  // Cast: currentMood added to schema — remove `as any` after `npx prisma generate`
-  const companion = await prisma.companion.findUnique({ where: { id: companionId } }) as any;
+  const companion = await prisma.companion.findUnique({ where: { id: companionId } });
 
     // 3. Start workflow (non-blocking)
     const client = await getTemporalClient();

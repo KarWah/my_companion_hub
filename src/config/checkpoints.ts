@@ -42,7 +42,7 @@ export const CHECKPOINTS: Record<'anime' | 'realistic', CheckpointConfig> = {
 
   realistic: {
     // TODO: Replace with your realistic model name from CivitAI/SD Forge
-    name: 'realisticVision_or_your_realistic_model.safetensors',
+    name: 'realistic',
 
     // No LoRA for realistic style (or add a custom one later if desired)
     lora: undefined,

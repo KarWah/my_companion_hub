@@ -59,7 +59,7 @@ describe('Memory System Integration', () => {
       content: 'User loves pizza',
       category: 'preference' as const,
       importance: 8,
-      embedding: pizzaEmbedding as any,
+      embedding: pizzaEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -75,7 +75,7 @@ describe('Memory System Integration', () => {
       content: 'User favorite color is blue',
       category: 'preference' as const,
       importance: 7,
-      embedding: colorEmbedding as any,
+      embedding: colorEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -86,8 +86,8 @@ describe('Memory System Integration', () => {
     };
 
     vi.mocked(prisma.memory.create)
-      .mockResolvedValueOnce(storedMemory1)
-      .mockResolvedValueOnce(storedMemory2);
+      .mockResolvedValueOnce(storedMemory1 as any)
+      .mockResolvedValueOnce(storedMemory2 as any);
 
     const extracted = await extractAndStoreMemories(
       'comp-1',
@@ -108,7 +108,7 @@ describe('Memory System Integration', () => {
     vi.mocked(prisma.memory.findMany).mockResolvedValue([
       storedMemory1,
       storedMemory2
-    ]);
+    ] as any);
 
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
@@ -158,7 +158,7 @@ describe('Memory System Integration', () => {
       content: 'User secret for companion A',
       category: 'personal_fact',
       importance: 10,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -166,7 +166,7 @@ describe('Memory System Integration', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     await extractAndStoreMemories(
       'comp-a',
@@ -210,7 +210,7 @@ describe('Memory System Integration', () => {
       content: 'Old memory',
       category: 'personal_fact' as const,
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-old'],
       context: null,
       isActive: true,
@@ -226,7 +226,7 @@ describe('Memory System Integration', () => {
       content: 'Recent memory',
       category: 'personal_fact' as const,
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-recent'],
       context: null,
       isActive: true,
@@ -236,7 +236,7 @@ describe('Memory System Integration', () => {
       updatedAt: now,
     };
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue([oldMemory, recentMemory]);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue([oldMemory, recentMemory] as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 2 });
 
     const retrieved = await retrieveRelevantMemories('comp-1', 'test query');
@@ -258,7 +258,7 @@ describe('Memory System Integration', () => {
       content: 'Low importance memory',
       category: 'personal_fact' as const,
       importance: 2,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -274,7 +274,7 @@ describe('Memory System Integration', () => {
       content: 'High importance memory',
       category: 'personal_fact' as const,
       importance: 10,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-2'],
       context: null,
       isActive: true,
@@ -284,7 +284,7 @@ describe('Memory System Integration', () => {
       updatedAt: new Date(),
     };
 
-    vi.mocked(prisma.memory.findMany).mockResolvedValue([lowImportance, highImportance]);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue([lowImportance, highImportance] as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 2 });
 
     const retrieved = await retrieveRelevantMemories('comp-1', 'test query');
@@ -327,7 +327,7 @@ describe('Memory System Integration', () => {
         content: 'Existing memory',
         category: 'personal_fact',
         importance: 5,
-        embedding: mockEmbedding as any,
+        embedding: mockEmbedding,
         sourceMessageIds: ['msg-old'],
         context: null,
         isActive: true,
@@ -336,7 +336,7 @@ describe('Memory System Integration', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }
-    ]);
+    ] as any);
 
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
@@ -358,7 +358,7 @@ describe('Memory System Integration', () => {
         content: 'Active memory',
         category: 'personal_fact',
         importance: 5,
-        embedding: mockEmbedding as any,
+        embedding: mockEmbedding,
         sourceMessageIds: ['msg-1'],
         context: null,
         isActive: true,
@@ -367,7 +367,7 @@ describe('Memory System Integration', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }
-    ]);
+    ] as any);
 
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
@@ -413,7 +413,7 @@ describe('Memory System Integration', () => {
       content: 'User birthday is May 15th',
       category: 'personal_fact' as const,
       importance: 10,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: 'Mentioned during birthday discussion',
       isActive: true,
@@ -423,7 +423,7 @@ describe('Memory System Integration', () => {
       updatedAt: new Date(),
     };
 
-    vi.mocked(prisma.memory.create).mockResolvedValue(memoryWithContext);
+    vi.mocked(prisma.memory.create).mockResolvedValue(memoryWithContext as any);
 
     const extracted = await extractAndStoreMemories(
       'comp-1',
@@ -438,7 +438,7 @@ describe('Memory System Integration', () => {
     expect(extracted.memories[0].context).toBe('Mentioned during birthday discussion');
 
     // Retrieve and verify context is preserved
-    vi.mocked(prisma.memory.findMany).mockResolvedValue([memoryWithContext]);
+    vi.mocked(prisma.memory.findMany).mockResolvedValue([memoryWithContext] as any);
     vi.mocked(prisma.memory.updateMany).mockResolvedValue({ count: 1 });
 
     const retrieved = await retrieveRelevantMemories('comp-1', 'When is my birthday?');
@@ -474,7 +474,7 @@ describe('Memory System Integration', () => {
       content: 'Memory',
       category: 'personal_fact',
       importance: 5,
-      embedding: mockEmbedding as any,
+      embedding: mockEmbedding,
       sourceMessageIds: ['msg-1'],
       context: null,
       isActive: true,
@@ -482,7 +482,7 @@ describe('Memory System Integration', () => {
       lastAccessedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
     const extracted = await extractAndStoreMemories(
       'comp-1',

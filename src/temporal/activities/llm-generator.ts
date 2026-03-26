@@ -52,7 +52,6 @@ export async function generateLLMResponse(
   }, 'Starting LLM response generation');
 
   // Fetch companion data
-  // Note: currentMood/affectionLevel/trustLevel added to schema — remove `as any` after `prisma generate`
   const companion = await prisma.companion.findUnique({
     where: { id: companionId },
     select: {
@@ -63,16 +62,8 @@ export async function generateLLMResponse(
       currentMood: true,
       affectionLevel: true,
       trustLevel: true,
-    } as any
-  }) as {
-    name: string;
-    description: string;
-    userAppearance: string | null;
-    extendedPersonality: string | null;
-    currentMood: string;
-    affectionLevel: number;
-    trustLevel: number;
-  } | null;
+    },
+  });
 
   if (!companion) {
     log.error('Companion not found');
@@ -89,14 +80,7 @@ export async function generateLLMResponse(
     }
   }
 
-  // Clean history for API — strip asterisk actions from previous assistant messages
-  // so the model sees clean format examples rather than reinforcing the *action* pattern
-  const cleanHistory = history.map(h => ({
-    role: h.role,
-    content: h.role === 'assistant'
-      ? h.content.replace(/\*[^*]+\*/g, '').replace(/\s+/g, ' ').trim()
-      : h.content
-  }));
+  const cleanHistory = history.map(h => ({ role: h.role, content: h.content }));
 
   // Build system prompt using centralized prompt builder (with memories and personality)
   const systemPrompt = buildLLMSystemPrompt(
@@ -341,24 +325,18 @@ export async function generateLLMResponse(
   // Clean up text - remove action markers but keep the actual speech
   const originalLength = fullText.length;
 
-  // Remove scene/state tags if present
-  fullText = fullText.replace(/\[.*?(SCENE|STATE).*?\][\s\S]*?\[\/.*?(SCENE|STATE).*?\]/gi, "");
-
-  // Remove parenthetical actions like (giggles), (smiles) - only lowercase
-  fullText = fullText.replace(/\s*\([a-z\s]+\)\s*/gi, " ");
-
-  // Remove asterisk actions like *blushes*, *smiles slowly* — enforce no-asterisk format at output layer
-  fullText = fullText.replace(/\*[^*]+\*/g, "");
-
-  // Clean up extra whitespace
-  fullText = fullText.replace(/\s+/g, " ").trim();
+  // Use safeStreamText as the saved text — it's already cleaned by the state machine
+  // (strips [SCENE] blocks and (parenthetical actions)), so it exactly matches what
+  // was streamed to the client. This prevents the message from visibly changing when
+  // revalidatePath reloads messages from the DB after finalization.
+  const finalText = safeStreamText.replace(/\s+/g, " ").trim();
 
   log.info({
     duration: timer(),
     tokenCount,
     originalLength,
-    cleanedLength: fullText.length,
+    cleanedLength: finalText.length,
   }, 'LLM response generation completed');
 
-  return fullText;
+  return finalText;
 }

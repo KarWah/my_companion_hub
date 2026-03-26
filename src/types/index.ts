@@ -312,6 +312,7 @@ export interface MemoryRecord {
   lastAccessedAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  relevanceScore?: number; // set by memory-retriever hybrid ranking
 }
 
 export interface MemoryExtractionResult {
