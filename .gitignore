@@ -48,3 +48,4 @@ database_backup_*.sql
 
 # claude tool artifacts
 tmpclaude-*
+DEMO.md
